@@ -90,7 +90,7 @@ async function sendChatRoomSystemMessage(chatRoomId: number, order: Order): Prom
       '📋 THÔNG TIN TƯ VẤN',
       '━━━━━━━━━━━━━━━━━━',
       `👤 Tên: ${user.name}`,
-      `📱 SĐT: ${user.phone}`,
+      `📱 SIM cũ cần đổi: ${user.phone}`,
       `🗓 Ngày sinh: ${dobStr} | ⏰ Giờ sinh: ${user.tob}`,
       `⚡ Mệnh: ${user.menh} | 🎯 Cải vận: ${user.focusArea || '—'}`,
       '━━━━━━━━━━━━━━━━━━',
@@ -194,4 +194,46 @@ export async function pollPaymentStatus(orderId: number, timeoutMs = 20000): Pro
 
   const order = await Order.findByPk(orderId);
   return { paid: false, order: order! };
+}
+
+export async function forcePayOrder(orderId: number): Promise<Order> {
+  const order = await Order.findByPk(orderId);
+  if (!order) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: 'Đơn hàng không tồn tại.' };
+  }
+  if (order.status !== 'pending') {
+    return order;
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    order.status = 'paid';
+    order.web2mTransactionId = 'TEST_BYPASS_' + Date.now();
+    order.paidAt = new Date();
+    await order.save({ transaction: t });
+
+    const orderWithUser = await Order.findByPk(order.id, {
+      include: [{ model: User, as: 'user' }],
+      transaction: t
+    });
+    const user = (orderWithUser as any)?.user as User | null;
+    const sourceType = user?.referredByCode ? 'referral' : 'direct';
+
+    const [chatRoom] = await ChatRoom.findOrCreate({
+      where: { orderId: order.id },
+      defaults: { orderId: order.id, status: 'active', sourceType },
+      transaction: t
+    });
+
+    t.afterCommit(async () => {
+      await sendChatRoomSystemMessage(chatRoom.id, order);
+      notifyAdminNewChatRoom(chatRoom);
+    });
+
+    await t.commit();
+    return order;
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
 }

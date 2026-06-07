@@ -47,6 +47,7 @@ describe('Kiểm thử Dịch vụ Thanh toán - services/payment.service.ts', (
       await testOrder200k.destroy();
     }
     if (testOrder500k) {
+      await ChatRoom.destroy({ where: { orderId: testOrder500k.id } });
       await testOrder500k.destroy();
     }
     if (testUser) {
@@ -143,9 +144,10 @@ describe('Kiểm thử Dịch vụ Thanh toán - services/payment.service.ts', (
     expect(result.paid).toBe(true);
     expect(result.order.status).toBe('paid');
 
-    // 4. Xác nhận KHÔNG có ChatRoom nào được tạo (vì gói 500k chuyển hướng trực tiếp qua Zalo)
+    // 4. Xác nhận ChatRoom được khởi tạo tự động cho gói 500k
     const chatRoom = await ChatRoom.findOne({ where: { orderId: testOrder500k.id } });
-    expect(chatRoom).toBeNull();
+    expect(chatRoom).toBeDefined();
+    expect(chatRoom?.status).toBe('active');
   });
 
   test('checkAndUpdateOrderStatus - Tự động huỷ và chuyển đơn hàng sang expired sau 10 phút', async () => {

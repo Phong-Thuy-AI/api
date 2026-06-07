@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
+import { Op } from 'sequelize';
 import { ChatRoom, ChatMessage, Order, User } from '@/models';
 import { sendSuccess } from '@/utils/response';
-import { CHAT_ROOM_ACTIVE } from '@/utils/constants';
+import { CHAT_ROOM_ACTIVE, CHAT_ROOM_CLOSED } from '@/utils/constants';
 
 /**
  * Lấy danh sách phòng chat đang active kèm thông tin đơn hàng và người dùng
@@ -10,7 +11,7 @@ import { CHAT_ROOM_ACTIVE } from '@/utils/constants';
  */
 export async function getActiveRooms(req: Request, res: Response) {
   const rooms = await ChatRoom.findAll({
-    where: { status: CHAT_ROOM_ACTIVE },
+    where: { status: { [Op.in]: [CHAT_ROOM_ACTIVE, CHAT_ROOM_CLOSED] } },
     include: [
       {
         model: Order,
@@ -27,7 +28,47 @@ export async function getActiveRooms(req: Request, res: Response) {
     order: [['createdAt', 'DESC']]
   });
 
-  return sendSuccess(res, rooms, `Lấy danh sách ${rooms.length} phòng chat đang hoạt động thành công.`);
+  const roomsWithMetadata = await Promise.all(
+    rooms.map(async (room) => {
+      // Lấy tin nhắn cuối cùng trong phòng
+      const lastMessage = await ChatMessage.findOne({
+        where: { roomId: room.id },
+        order: [['id', 'DESC']]
+      });
+
+      // Lấy tin nhắn cuối cùng do admin gửi
+      const lastAdminMsg = await ChatMessage.findOne({
+        where: { roomId: room.id, senderType: 'admin' },
+        order: [['id', 'DESC']]
+      });
+
+      let unreadCount = 0;
+      if (lastAdminMsg) {
+        unreadCount = await ChatMessage.count({
+          where: {
+            roomId: room.id,
+            id: { [Op.gt]: lastAdminMsg.id },
+            senderType: { [Op.ne]: 'admin' }
+          }
+        });
+      } else {
+        unreadCount = await ChatMessage.count({
+          where: {
+            roomId: room.id,
+            senderType: { [Op.ne]: 'admin' }
+          }
+        });
+      }
+
+      return {
+        ...room.toJSON(),
+        lastMessage,
+        unreadCount
+      };
+    })
+  );
+
+  return sendSuccess(res, roomsWithMetadata, `Lấy danh sách ${rooms.length} phòng chat đang hoạt động thành công.`);
 }
 
 /**

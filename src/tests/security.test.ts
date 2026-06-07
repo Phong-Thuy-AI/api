@@ -140,6 +140,7 @@ describe('Kiểm thử bảo mật & nghiệp vụ - Security & Ownership Contro
         user: { userId: userA.id, role: 'user' },
         body: {
           packageType: '200k',
+          carrier: 'Viettel',
           userId: userB.id // Cố tình truyền userId của người khác
         }
       } as unknown as Request;
@@ -160,6 +161,7 @@ describe('Kiểm thử bảo mật & nghiệp vụ - Security & Ownership Contro
         admin: { id: 'admin', role: 'admin' },
         body: {
           packageType: '200k',
+          carrier: 'Viettel',
           userId: userB.id
         }
       } as unknown as Request;
@@ -181,6 +183,7 @@ describe('Kiểm thử bảo mật & nghiệp vụ - Security & Ownership Contro
         admin: { id: 'admin', role: 'admin' },
         body: {
           packageType: '200k',
+          carrier: 'Viettel',
           userId: 999999 // User không tồn tại
         }
       } as unknown as Request;
