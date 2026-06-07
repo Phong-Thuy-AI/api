@@ -1,6 +1,6 @@
 import { Server as SocketServer, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
-import cookieLib from 'cookie';
+import * as cookieLib from 'cookie';
 import { verifyToken } from '@/utils/jwt';
 import { ChatMessage, ChatRoom, Order, User } from '@/models';
 import { SENDER_ADMIN, SENDER_USER, CHAT_ROOM_ACTIVE } from '@/utils/constants';
@@ -29,37 +29,41 @@ export function initSocketService(httpServer: HttpServer): SocketServer {
   // Middleware xác thực JWT từ Cookie trước khi cho phép kết nối
   // ────────────────────────────────────────────────────────────
   io.use((socket: Socket, next) => {
-    try {
-      const rawCookie = socket.handshake.headers.cookie || '';
-      const cookies = cookieLib.parse(rawCookie);
+    const rawCookie = socket.handshake.headers.cookie || '';
+    const cookies = cookieLib.parse(rawCookie);
 
-      const adminToken = cookies['admin_token'];
-      const userToken = cookies['user_token'];
+    const adminToken = cookies['admin_token'];
+    const userToken = cookies['user_token'];
 
-      if (!adminToken && !userToken) {
-        return next(new Error('UNAUTHORIZED: Không tìm thấy phiên đăng nhập.'));
-      }
+    if (!adminToken && !userToken) {
+      return next(new Error('UNAUTHORIZED: Không tìm thấy phiên đăng nhập.'));
+    }
 
-      if (adminToken) {
+    if (adminToken) {
+      try {
         const decoded = verifyToken(adminToken);
         if (decoded.role === 'admin') {
           (socket.data as SocketData).role = 'admin';
           (socket.data as SocketData).adminId = decoded.id as string;
           return next();
         }
+      } catch (err) {
+        console.warn('[Socket] Admin token validation failed, falling back to user token check.');
       }
+    }
 
-      if (userToken) {
+    if (userToken) {
+      try {
         const decoded = verifyToken(userToken);
         (socket.data as SocketData).role = 'user';
         (socket.data as SocketData).userId = decoded.userId as number;
         return next();
+      } catch (err) {
+        console.warn('[Socket] User token validation failed.');
       }
-
-      return next(new Error('UNAUTHORIZED: Token không hợp lệ.'));
-    } catch (err) {
-      return next(new Error('UNAUTHORIZED: Xác thực phiên thất bại.'));
     }
+
+    return next(new Error('UNAUTHORIZED: Xác thực phiên thất bại hoặc token không hợp lệ.'));
   });
 
   // ────────────────────────────────────────────────────────────
