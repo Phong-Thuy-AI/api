@@ -1,0 +1,97 @@
+services:
+  # 1. Cơ sở dữ liệu MySQL (Chạy trong container, expose port 3306 ra ngoài để dev chạy local vẫn kết nối được)
+  db:
+    image: mysql:8.0
+    container_name: phongthuy_db
+    restart: always
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Backend API NodeJS Express (Sử dụng Dockerfile trong cùng thư mục)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phongthuy_api
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - PORT=${PORT:-3000}
+      - NODE_ENV=${NODE_ENV:-production}
+      - DB_HOST=${COMPOSE_DB_HOST:-db}
+      - DB_PORT=${COMPOSE_DB_PORT:-3306}
+      - DB_USER=${DB_USER:-root}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - ZALO_ADMIN_NUMBER=${ZALO_ADMIN_NUMBER}
+      - CLIENT_URL=${CLIENT_URL}
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+
+  # 3. Nginx Reverse Proxy (Chỉ chuyển tiếp API và WebSockets)
+  web:
+    image: nginx:alpine
+    container_name: phongthuy_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/logs:/var/log/nginx
+      - ./nginx/certs:/etc/letsencrypt
+      - ./nginx/certbot:/var/www/certbot
+    depends_on:
+      - api
+    networks:
+      - app-network
+
+  # 4. Certbot (Tự động cấp phát và gia hạn chứng chỉ SSL Let's Encrypt)
+  certbot:
+    image: certbot/certbot:latest
+    container_name: phongthuy_certbot
+    restart: always
+    volumes:
+      - ./nginx/certs:/etc/letsencrypt
+      - ./nginx/certbot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12d & wait $${!}; done'"
+    networks:
+      - app-network
+
+volumes:
+  db_data:
+
+networks:
+  app-network:
+    driver: bridge
