@@ -1,19 +1,40 @@
 import nodemailer from 'nodemailer';
+import { SystemConfig } from '@/models';
 
-function isSmtpConfigured(): boolean {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.EMAIL_FROM);
+async function getEmailConfig() {
+  const dbHost = await SystemConfig.findByPk('SMTP_HOST');
+  const dbPort = await SystemConfig.findByPk('SMTP_PORT');
+  const dbUser = await SystemConfig.findByPk('SMTP_USER');
+  const dbPass = await SystemConfig.findByPk('SMTP_PASS');
+  const dbFrom = await SystemConfig.findByPk('EMAIL_FROM');
+
+  return {
+    host: dbHost?.value || process.env.SMTP_HOST || '',
+    port: parseInt(dbPort?.value || process.env.SMTP_PORT || '587', 10),
+    user: dbUser?.value || process.env.SMTP_USER || '',
+    pass: dbPass?.value || process.env.SMTP_PASS || '',
+    from: dbFrom?.value || process.env.EMAIL_FROM || ''
+  };
 }
 
-function createTransporter() {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_PORT === '465',
+async function getTransporterAndFrom() {
+  const config = await getEmailConfig();
+  if (!config.host || !config.user || !config.pass || !config.from) {
+    console.warn('[Email] Bỏ qua gửi email vì SMTP chưa được cấu hình đầy đủ.');
+    return null;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.port === 465,
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
+      user: config.user,
+      pass: config.pass
     }
   });
+
+  return { transporter, from: config.from };
 }
 
 /**
@@ -24,11 +45,11 @@ export async function sendSimReport(
   name: string,
   analysisContent: string
 ): Promise<void> {
-  if (!isSmtpConfigured()) return;
+  const smtp = await getTransporterAndFrom();
+  if (!smtp) return;
 
-  const transporter = createTransporter();
-  await transporter.sendMail({
-    from: `"Phong Thủy SIM Cát Hùng" <${process.env.EMAIL_FROM}>`,
+  await smtp.transporter.sendMail({
+    from: `"Phong Thủy SIM Cát Hùng" <${smtp.from}>`,
     to,
     subject: `Báo cáo phong thủy SIM của ${name}`,
     html: `
@@ -61,11 +82,11 @@ export async function sendDailyHoroscope(
   content: string,
   dateStr: string
 ): Promise<void> {
-  if (!isSmtpConfigured()) return;
+  const smtp = await getTransporterAndFrom();
+  if (!smtp) return;
 
-  const transporter = createTransporter();
-  await transporter.sendMail({
-    from: `"Phong Thủy SIM Cát Hùng" <${process.env.EMAIL_FROM}>`,
+  await smtp.transporter.sendMail({
+    from: `"Phong Thủy SIM Cát Hùng" <${smtp.from}>`,
     to,
     subject: `🌟 Tử vi vận khí ngày ${dateStr} — Mệnh ${menh}`,
     html: `

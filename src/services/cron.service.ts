@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { Op } from 'sequelize';
-import { DailyHoroscope, User } from '@/models';
+import { DailyHoroscope, User, DailyEmailLog } from '@/models';
 import { generateDailyHoroscope } from '@/services/ai.service';
 import { sendDailyHoroscope } from '@/services/email.service';
 import { MENH_LIST, FOCUS_AREAS } from '@/utils/constants';
@@ -21,6 +21,16 @@ export async function generateAllDailyHoroscopes(): Promise<void> {
   for (const menh of MENH_LIST) {
     for (const focusArea of FOCUS_AREAS) {
       try {
+        // Kiểm tra xem đã có bản tử vi lưu trong DB chưa để tránh gọi AI trùng lặp
+        const existing = await DailyHoroscope.findOne({
+          where: { date: today, menh, focusArea }
+        });
+        if (existing && existing.content) {
+          console.log(`[Cron] Horoscope already cached for ${menh} / ${focusArea}, skipping AI call.`);
+          successCount++;
+          continue;
+        }
+
         const content = await generateDailyHoroscope(menh, focusArea, dateStr);
         if (!content) {
           console.warn(`[Cron] AI returned null for ${menh}/${focusArea}, skipping.`);
@@ -31,8 +41,8 @@ export async function generateAllDailyHoroscopes(): Promise<void> {
         successCount++;
         console.log(`[Cron] Saved horoscope: ${menh} / ${focusArea}`);
 
-        // 1s delay giữa các lần gọi để tránh rate limit
-        await new Promise(r => setTimeout(r, 1000));
+        // Delay 6 giây giữa các lần gọi AI để tránh dính hạn mức 15 RPM của Gemini Free Tier
+        await new Promise(r => setTimeout(r, 6000));
       } catch (err) {
         console.error(`[Cron] Error generating ${menh}/${focusArea}:`, err);
       }
@@ -74,14 +84,38 @@ export async function sendAllDailyEmails(): Promise<void> {
 
       if (!horoscope) {
         console.warn(`[Cron] No horoscope found for ${user.menh}/${user.focusArea}, skipping ${user.email}.`);
+        await DailyEmailLog.create({
+          userId: user.id,
+          email: user.email,
+          date: today,
+          status: 'failed',
+          error: `Không tìm thấy nội dung tử vi cho ${user.menh} / ${user.focusArea}`,
+          sentAt: new Date()
+        });
         continue;
       }
 
       await sendDailyHoroscope(user.email, user.name, user.menh, horoscope.content, dateStr);
       sentCount++;
       console.log(`[Cron] Sent horoscope email to ${user.email}`);
-    } catch (err) {
+
+      await DailyEmailLog.create({
+        userId: user.id,
+        email: user.email,
+        date: today,
+        status: 'success',
+        sentAt: new Date()
+      });
+    } catch (err: any) {
       console.error(`[Cron] Failed to send email to ${user.email}:`, err);
+      await DailyEmailLog.create({
+        userId: user.id,
+        email: user.email,
+        date: today,
+        status: 'failed',
+        error: err.message || 'Lỗi gửi mail qua SMTP',
+        sentAt: new Date()
+      });
     }
   }
 

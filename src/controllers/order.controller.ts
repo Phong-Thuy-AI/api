@@ -160,14 +160,18 @@ export async function completeOrder(req: Request, res: Response) {
     if (orderUser.referredByCode) {
       const referrer = await User.findOne({ where: { referralCode: orderUser.referredByCode } });
       if (referrer) {
-        const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
-        const maxCap = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-        const base = referrer.horoscopeExpiresAt && referrer.horoscopeExpiresAt > now
-          ? referrer.horoscopeExpiresAt.getTime()
-          : now.getTime();
-        referrer.horoscopeExpiresAt = new Date(Math.min(base + ONE_MONTH_MS, maxCap.getTime()));
-        await referrer.save();
-        console.log(`[Order] Referral +1 month: ${referrer.email} (referred ${orderUser.email})`);
+        if (referrer.referralBonusMonths < 12) {
+          const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+          const base = referrer.horoscopeExpiresAt && referrer.horoscopeExpiresAt > now
+            ? referrer.horoscopeExpiresAt.getTime()
+            : now.getTime();
+          referrer.horoscopeExpiresAt = new Date(base + ONE_MONTH_MS);
+          referrer.referralBonusMonths += 1;
+          await referrer.save();
+          console.log(`[Order] Referral +1 month: ${referrer.email} (referred ${orderUser.email}). Total bonus months: ${referrer.referralBonusMonths}`);
+        } else {
+          console.log(`[Order] Referrer ${referrer.email} already reached max 12 bonus months. Skipping bonus.`);
+        }
       }
     }
   }

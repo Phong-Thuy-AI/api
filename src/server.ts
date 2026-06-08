@@ -29,7 +29,13 @@ async function startServer() {
     await sequelize.authenticate()
     console.log('Database connection has been established successfully.')
 
-    await sequelize.sync({ alter: true })
+    if (process.env.NODE_ENV === 'development') {
+      // Chỉ thay đổi cấu trúc bảng khi đang code (Local Development)
+      await sequelize.sync({ alter: true })
+    } else {
+      // Ở Production, chỉ kết nối kiểm tra thông thường, tránh can thiệp sâu cấu trúc dữ liệu
+      await sequelize.sync()
+    }
     console.log('Database synchronized.')
 
     initCronJobs()

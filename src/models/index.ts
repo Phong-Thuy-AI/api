@@ -6,6 +6,7 @@ import { ChatRoom } from './chatRoom.model'
 import { ChatMessage } from './chatMessage.model'
 import { DailyHoroscope } from './dailyHoroscope.model'
 import { SystemConfig } from './systemConfig.model'
+import { DailyEmailLog } from './dailyEmailLog.model'
 
 // Define Associations
 
@@ -21,6 +22,10 @@ ChatRoom.belongsTo(Order, { foreignKey: 'orderId', as: 'order' })
 ChatRoom.hasMany(ChatMessage, { foreignKey: 'roomId', as: 'messages' })
 ChatMessage.belongsTo(ChatRoom, { foreignKey: 'roomId', as: 'chatRoom' })
 
+// User <-> DailyEmailLog (One-to-Many)
+User.hasMany(DailyEmailLog, { foreignKey: 'userId', as: 'emailLogs' })
+DailyEmailLog.belongsTo(User, { foreignKey: 'userId', as: 'user' })
+
 export {
   sequelize,
   User,
@@ -29,7 +34,8 @@ export {
   ChatRoom,
   ChatMessage,
   DailyHoroscope,
-  SystemConfig
+  SystemConfig,
+  DailyEmailLog
 }
 
 export default {
@@ -40,5 +46,6 @@ export default {
   ChatRoom,
   ChatMessage,
   DailyHoroscope,
-  SystemConfig
+  SystemConfig,
+  DailyEmailLog
 }
