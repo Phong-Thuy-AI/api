@@ -25,7 +25,7 @@ export async function generatePaymentCode(): Promise<string> {
 }
 
 export function generateQrUrl(amount: number, paymentCode: string): string {
-  const apiGetQr = process.env.WEB2M_API_GET_QR || 'https://api.web2m.com/api/QR';
+  const apiGetQr = process.env.WEB2M_API_GET_QR || 'https://api.web2m.com/quicklink';
   const bankName = process.env.WEB2M_BANK_NAME || 'MBBank';
   const bankNumber = process.env.WEB2M_BANK_NUMBER || '123456789';
   const accountHolder = process.env.WEB2M_ACCOUNT_HOLDER || '';
@@ -44,8 +44,10 @@ export async function fetchWeb2MTransactions(): Promise<Web2MTransaction[]> {
   const url = `${apiGetTransaction}/${bankPassword}/${bankNumber}/${bankToken}`;
   try {
     const response = await axios.get<{ transactions?: Web2MTransaction[]; error?: string }>(url, { timeout: 10000 });
+    console.log("response.data11111111111111", response.data);
     return response.data.transactions || [];
   } catch (error) {
+    console.log("url11111111111111", url);
     console.warn('Web2M transaction fetch failed:', error);
     return [];
   }
@@ -235,5 +237,71 @@ export async function forcePayOrder(orderId: number): Promise<Order> {
   } catch (err) {
     await t.rollback();
     throw err;
+  }
+}
+
+export async function checkAllPendingOrders(): Promise<void> {
+  const pendingOrders = await Order.findAll({ where: { status: 'pending' } });
+  if (pendingOrders.length === 0) return;
+
+  const now = Date.now();
+  const validPendingOrders: Order[] = [];
+
+  for (const order of pendingOrders) {
+    const qrAge = now - new Date(order.createdAt).getTime();
+    if (qrAge > QR_TTL_MS) {
+      order.status = 'expired';
+      await order.save();
+      console.log(`[Payment Sweeper] Đơn hàng #${order.id} đã hết hạn.`);
+    } else {
+      validPendingOrders.push(order);
+    }
+  }
+
+  if (validPendingOrders.length === 0) return;
+
+  const transactions = await fetchWeb2MTransactions();
+  if (transactions.length === 0) return;
+
+  for (const order of validPendingOrders) {
+    const match = transactions.find(tx =>
+      tx.type === 'IN' &&
+      tx.description.toUpperCase().includes(order.paymentCode.toUpperCase()) &&
+      Number(tx.amount) >= Number(order.amount)
+    );
+
+    if (match) {
+      const t = await sequelize.transaction();
+      try {
+        order.status = 'paid';
+        order.web2mTransactionId = String(match.transactionID);
+        order.paidAt = new Date();
+        await order.save({ transaction: t });
+
+        const orderWithUser = await Order.findByPk(order.id, {
+          include: [{ model: User, as: 'user' }],
+          transaction: t
+        });
+        const user = (orderWithUser as any)?.user as User | null;
+        const sourceType = user?.referredByCode ? 'referral' : 'direct';
+
+        const [chatRoom] = await ChatRoom.findOrCreate({
+          where: { orderId: order.id },
+          defaults: { orderId: order.id, status: 'active', sourceType },
+          transaction: t
+        });
+
+        t.afterCommit(async () => {
+          await sendChatRoomSystemMessage(chatRoom.id, order);
+          notifyAdminNewChatRoom(chatRoom);
+          console.log(`[Payment Sweeper] Đơn hàng #${order.id} đối soát thành công qua background sweeper.`);
+        });
+
+        await t.commit();
+      } catch (err) {
+        await t.rollback();
+        console.error(`[Payment Sweeper] Lỗi xử lý đơn hàng #${order.id}:`, err);
+      }
+    }
   }
 }

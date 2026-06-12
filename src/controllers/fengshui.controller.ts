@@ -42,11 +42,42 @@ async function getUniqueReferralCode(baseCode: string): Promise<string> {
 }
 
 /**
- * Gọi AI với timeout tối đa 15 giây, trả null nếu quá thời gian hoặc lỗi
+ * Gọi AI với timeout tối đa 50 giây, trả null nếu quá thời gian hoặc lỗi
  */
 async function tryGenerateAnalysis(params: Parameters<typeof generateSimAnalysis>[0]): Promise<string | null> {
-  const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 15000));
-  return Promise.race([generateSimAnalysis(params), timeout]);
+  const startTime = Date.now();
+  console.log(`[AI] === Bắt đầu gọi AI phân tích SIM ===`);
+  console.log(`[AI] Thông tin: name=${params.name}, phoneLast6=${params.hexHau ? 'có' : 'không'}, menh=${params.menh}`);
+
+  let isTimeout = false;
+  const timeoutPromise = new Promise<null>(resolve => 
+    setTimeout(() => {
+      isTimeout = true;
+      resolve(null);
+    }, 120000)
+  );
+
+  try {
+    const result = await Promise.race([generateSimAnalysis(params), timeoutPromise]);
+    const duration = Date.now() - startTime;
+
+    if (isTimeout) {
+      console.warn(`[AI] ❌ QUÁ THỜI GIAN CHỜ (TIMEOUT): Cuộc gọi AI vượt quá 120 giây.`);
+      return null;
+    }
+
+    if (!result) {
+      console.error(`[AI] ❌ THẤT BẠI: AI phản hồi rỗng (null) hoặc gặp lỗi kết nối. Thời gian chạy: ${duration}ms`);
+    } else {
+      console.log(`[AI] ✅ THÀNH CÔNG: Đã nhận phản hồi từ AI. Thời gian chạy: ${duration}ms, độ dài phản hồi: ${result.length} ký tự`);
+    }
+
+    return result;
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    console.error(`[AI] ❌ LỖI trong quá trình gọi AI (sau ${duration}ms):`, error.message || error);
+    return null;
+  }
 }
 
 /**
@@ -66,7 +97,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
   } = req.body;
 
   // 1. Validate các trường dữ liệu
-  if (!name || !email || !phone || !dob || !tob || usedLessThan6Months === undefined || !focusArea) {
+  if (!name || !phone || !dob || usedLessThan6Months === undefined) {
     throw {
       statusCode: 400,
       code: 'VALIDATION_ERROR',
@@ -74,13 +105,15 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     };
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    throw {
-      statusCode: 400,
-      code: 'VALIDATION_ERROR',
-      message: 'Địa chỉ email không đúng định dạng.'
-    };
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw {
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'Địa chỉ email không đúng định dạng.'
+      };
+    }
   }
 
   const cleanPhone = phone.replace(/\D/g, '');
@@ -92,13 +125,15 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     };
   }
 
-  const validFocusAreas = ['Gia đạo', 'Tình duyên', 'Công việc', 'Công danh', 'Sự nghiệp'];
-  if (!validFocusAreas.includes(focusArea)) {
-    throw {
-      statusCode: 400,
-      code: 'VALIDATION_ERROR',
-      message: 'Vấn đề cần cải vận không hợp lệ.'
-    };
+  if (focusArea) {
+    const validFocusAreas = ['Gia đạo', 'Tình duyên', 'Công việc', 'Công danh', 'Sự nghiệp'];
+    if (!validFocusAreas.includes(focusArea)) {
+      throw {
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'Vấn đề cần cải vận không hợp lệ.'
+      };
+    }
   }
 
   // 2. Tính toán phong thủy
@@ -172,14 +207,15 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     }
   });
 
-  let user = await User.findOne({ where: { email } });
+  let user = await User.findOne({ where: { phone: cleanPhone } });
   if (user) {
     user.name = name;
+    user.email = email ? email.trim() : null;
     user.phone = cleanPhone;
     user.dob = new Date(dob);
-    user.tob = tob;
+    user.tob = tob || '';
     user.menh = menh;
-    user.focusArea = focusArea;
+    user.focusArea = focusArea || null;
     user.lastCheckResult = checkResultJson;
     if (referredByCode && !user.referredByCode) {
       user.referredByCode = referredByCode;
@@ -191,12 +227,12 @@ export async function checkFengShuiSim(req: Request, res: Response) {
 
     user = await User.create({
       name,
-      email,
+      email: email ? email.trim() : null,
       phone: cleanPhone,
       dob: new Date(dob),
-      tob,
+      tob: tob || '',
       menh,
-      focusArea,
+      focusArea: focusArea || null,
       lastCheckResult: checkResultJson,
       referralCode,
       referredByCode: referredByCode || null
@@ -217,6 +253,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
   const aiAnalysis = await tryGenerateAnalysis({
     name,
     dob,
+    tob,
     menh,
     focusArea,
     usedLessThan6Months,
@@ -237,9 +274,11 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     user.lastCheckResult = JSON.stringify(fullResult);
     user.save().catch(err => console.error('[Fengshui] Update lastCheckResult error:', err));
 
-    sendSimReport(user.email, user.name, aiAnalysis).catch(err =>
-      console.error('[Email] sendSimReport error:', err)
-    );
+    if (user.email) {
+      sendSimReport(user.email, user.name, aiAnalysis).catch(err =>
+        console.error('[Email] sendSimReport error:', err)
+      );
+    }
   }
 
   // 7. Trả kết quả

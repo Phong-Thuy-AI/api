@@ -93,7 +93,9 @@ export const requireUserOrAdmin = (req: Request, res: Response, next: NextFuncti
       });
     }
 
-    // 1. Kiểm tra quyền Admin trước
+    let authenticated = false;
+
+    // 1. Kiểm tra quyền Admin
     if (adminToken) {
       try {
         const decoded = verifyToken(adminToken);
@@ -102,21 +104,28 @@ export const requireUserOrAdmin = (req: Request, res: Response, next: NextFuncti
             id: decoded.id as string,
             role: decoded.role
           };
-          return next();
+          authenticated = true;
         }
       } catch (err) {
-        // Nếu token admin lỗi nhưng không có token user thì báo lỗi token admin
         if (!userToken) return next(err);
       }
     }
 
     // 2. Kiểm tra quyền User
     if (userToken) {
-      const decoded = verifyToken(userToken);
-      req.user = {
-        userId: decoded.userId as number,
-        role: decoded.role
-      };
+      try {
+        const decoded = verifyToken(userToken);
+        req.user = {
+          userId: decoded.userId as number,
+          role: decoded.role
+        };
+        authenticated = true;
+      } catch (err) {
+        if (!adminToken) return next(err);
+      }
+    }
+
+    if (authenticated) {
       return next();
     }
 

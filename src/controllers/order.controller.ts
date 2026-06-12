@@ -30,11 +30,8 @@ export async function createOrder(req: Request, res: Response) {
     throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Vui lòng chọn vấn đề cần tư vấn chuyên sâu.' };
   }
 
-  if (req.admin) {
+  if (req.admin && req.body.userId) {
     targetUserId = req.body.userId;
-    if (!targetUserId) {
-      throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Admin phải cung cấp userId để tạo đơn hàng.' };
-    }
     const userExists = await User.findByPk(targetUserId);
     if (!userExists) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'Không tìm thấy người dùng được yêu cầu tạo đơn hàng.' };
@@ -46,7 +43,71 @@ export async function createOrder(req: Request, res: Response) {
   }
 
   if (!targetUserId) {
+    if (req.admin && !req.body.userId) {
+      throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Admin phải cung cấp userId để tạo đơn hàng.' };
+    }
     throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Không xác định được thông tin người dùng tạo đơn hàng.' };
+  }
+
+  // 1. Kiểm tra xem đã có đơn hàng nào của gói này ở trạng thái 'paid' mà phòng chat vẫn active không
+  const paidOrder = await Order.findOne({
+    where: {
+      userId: targetUserId,
+      packageType,
+      status: 'paid'
+    },
+    order: [['createdAt', 'DESC']]
+  });
+
+  if (paidOrder) {
+    const chatRoom = await ChatRoom.findOne({ where: { orderId: paidOrder.id, status: 'active' } });
+    if (chatRoom) {
+      throw {
+        statusCode: 409,
+        code: 'ORDER_ALREADY_PAID',
+        message: 'Bạn đã đăng ký và thanh toán gói dịch vụ này rồi. Đang chuyển hướng vào phòng tư vấn...',
+        details: { chatRoomId: chatRoom.id }
+      };
+    }
+  }
+
+  // 2. Kiểm tra xem đã có đơn hàng nào của gói này đang ở trạng thái 'pending' dưới 10 phút không
+  const existingOrder = await Order.findOne({
+    where: {
+      userId: targetUserId,
+      packageType,
+      status: 'pending'
+    },
+    order: [['createdAt', 'DESC']]
+  });
+
+  if (existingOrder) {
+    const qrAge = Date.now() - new Date(existingOrder.createdAt).getTime();
+    if (qrAge <= 10 * 60 * 1000) {
+      const qrUrl = generateQrUrl(existingOrder.amount, existingOrder.paymentCode);
+      return sendSuccess(
+        res,
+        {
+          order: {
+            id: existingOrder.id,
+            userId: existingOrder.userId,
+            packageType: existingOrder.packageType,
+            amount: existingOrder.amount,
+            paymentCode: existingOrder.paymentCode,
+            status: existingOrder.status,
+            carrier: existingOrder.carrier,
+            consultationTopic: existingOrder.consultationTopic,
+            createdAt: existingOrder.createdAt
+          },
+          qrUrl
+        },
+        'Khôi phục đơn hàng cải vận đang chờ thanh toán.',
+        200
+      );
+    } else {
+      existingOrder.status = 'expired';
+      await existingOrder.save();
+    }
   }
 
   const amount = packageType === '200k' ? 200000 : 500000;
@@ -61,6 +122,15 @@ export async function createOrder(req: Request, res: Response) {
     carrier: carrier || null,
     consultationTopic: consultationTopic || null
   });
+
+  // Đồng bộ focusArea của User
+  if (consultationTopic) {
+    const user = await User.findByPk(targetUserId);
+    if (user) {
+      user.focusArea = consultationTopic;
+      await user.save();
+    }
+  }
 
   const qrUrl = generateQrUrl(amount, paymentCode);
 

@@ -3,6 +3,7 @@ import { Op } from 'sequelize';
 import { DailyHoroscope, User, DailyEmailLog } from '@/models';
 import { generateDailyHoroscope } from '@/services/ai.service';
 import { sendDailyHoroscope } from '@/services/email.service';
+import { checkAllPendingOrders } from '@/services/payment.service';
 import { MENH_LIST, FOCUS_AREAS } from '@/utils/constants';
 
 /**
@@ -64,7 +65,8 @@ export async function sendAllDailyEmails(): Promise<void> {
   const activeUsers = await User.findAll({
     where: {
       horoscopeExpiresAt: { [Op.gt]: new Date() },
-      focusArea: { [Op.not]: null }
+      focusArea: { [Op.not]: null },
+      email: { [Op.and]: [{ [Op.not]: null }, { [Op.ne]: '' }] }
     }
   });
 
@@ -83,10 +85,10 @@ export async function sendAllDailyEmails(): Promise<void> {
       });
 
       if (!horoscope) {
-        console.warn(`[Cron] No horoscope found for ${user.menh}/${user.focusArea}, skipping ${user.email}.`);
+        console.warn(`[Cron] No horoscope found for ${user.menh}/${user.focusArea}, skipping ${user.email!}.`);
         await DailyEmailLog.create({
           userId: user.id,
-          email: user.email,
+          email: user.email!,
           date: today,
           status: 'failed',
           error: `Không tìm thấy nội dung tử vi cho ${user.menh} / ${user.focusArea}`,
@@ -95,22 +97,22 @@ export async function sendAllDailyEmails(): Promise<void> {
         continue;
       }
 
-      await sendDailyHoroscope(user.email, user.name, user.menh, horoscope.content, dateStr);
+      await sendDailyHoroscope(user.email!, user.name, user.menh, horoscope.content, dateStr);
       sentCount++;
-      console.log(`[Cron] Sent horoscope email to ${user.email}`);
+      console.log(`[Cron] Sent horoscope email to ${user.email!}`);
 
       await DailyEmailLog.create({
         userId: user.id,
-        email: user.email,
+        email: user.email!,
         date: today,
         status: 'success',
         sentAt: new Date()
       });
     } catch (err: any) {
-      console.error(`[Cron] Failed to send email to ${user.email}:`, err);
+      console.error(`[Cron] Failed to send email to ${user.email!}:`, err);
       await DailyEmailLog.create({
         userId: user.id,
-        email: user.email,
+        email: user.email!,
         date: today,
         status: 'failed',
         error: err.message || 'Lỗi gửi mail qua SMTP',
@@ -135,6 +137,15 @@ export function initCronJobs(): void {
   }, {
     timezone: 'Asia/Ho_Chi_Minh'
   });
+
+  // Tự động đối soát các đơn hàng pending mỗi 20 giây để hỗ trợ trường hợp tắt modal/mất kết nối
+  setInterval(async () => {
+    try {
+      await checkAllPendingOrders();
+    } catch (err) {
+      console.error('[Cron] Lỗi quét đối soát đơn hàng pending:', err);
+    }
+  }, 20000);
 
   console.log('[Cron] Cron jobs initialized (daily horoscope at 00:00 ICT).');
 }
