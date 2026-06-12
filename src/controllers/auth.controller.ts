@@ -78,21 +78,23 @@ export async function getAdminProfile(req: Request, res: Response) {
 export async function lookupUser(req: Request, res: Response) {
   const { email, phone } = req.body;
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!email || !emailRegex.test(email)) {
-    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Email không đúng định dạng.' };
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Email không đúng định dạng.' };
+    }
   }
   const cleanPhone = String(phone || '').replace(/\D/g, '');
   if (cleanPhone.length < 6) {
     throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Số điện thoại phải chứa tối thiểu 6 chữ số.' };
   }
 
-  const user = await User.findOne({ where: { email, phone: cleanPhone } });
+  const user = await User.findOne({ where: { phone: cleanPhone } });
   if (!user) {
     throw {
       statusCode: 404,
       code: 'USER_NOT_FOUND',
-      message: 'Không tìm thấy khách hàng với email và số điện thoại này. Vui lòng kiểm tra lại.'
+      message: 'Không tìm thấy khách hàng với số điện thoại này. Vui lòng kiểm tra lại.'
     };
   }
 

@@ -49,7 +49,7 @@ export async function sendSimReport(
   if (!smtp) return;
 
   await smtp.transporter.sendMail({
-    from: `"Phong Thủy SIM Cát Hùng" <${smtp.from}>`,
+    from: `"DI NHÂN PHONG THỦY SỐ" <${smtp.from}>`,
     to,
     subject: `Báo cáo phong thủy SIM của ${name}`,
     html: `
@@ -65,7 +65,7 @@ export async function sendSimReport(
         <p>Để được tư vấn chọn SIM cải vận chuyên sâu, hãy đăng ký gói dịch vụ tại website của chúng tôi.</p>
         <hr style="border-color: #333; margin: 20px 0;">
         <p style="color: #888; font-size: 12px; text-align: center;">
-          Phong Thủy SIM Cát Hùng — Cải vận theo mệnh, đổi số đổi đời.
+          DI NHÂN PHONG THỦY SỐ — Cải vận theo mệnh, đổi số đổi đời.
         </p>
       </div>
     `
@@ -86,7 +86,7 @@ export async function sendDailyHoroscope(
   if (!smtp) return;
 
   await smtp.transporter.sendMail({
-    from: `"Phong Thủy SIM Cát Hùng" <${smtp.from}>`,
+    from: `"DI NHÂN PHONG THỦY SỐ" <${smtp.from}>`,
     to,
     subject: `🌟 Tử vi vận khí ngày ${dateStr} — Mệnh ${menh}`,
     html: `
@@ -101,7 +101,7 @@ export async function sendDailyHoroscope(
         </div>
         <hr style="border-color: #333; margin: 20px 0;">
         <p style="color: #888; font-size: 12px; text-align: center;">
-          Phong Thủy SIM Cát Hùng — Cải vận theo mệnh, đổi số đổi đời.
+          DI NHÂN PHONG THỦY SỐ — Cải vận theo mệnh, đổi số đổi đời.
         </p>
       </div>
     `

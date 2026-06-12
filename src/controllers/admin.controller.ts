@@ -23,7 +23,7 @@ export async function setConfig(req: Request, res: Response) {
     };
   }
 
-  const allowedKeys = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'ZALO_ADMIN_NUMBER'];
+  const allowedKeys = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'CLAUDE_API_KEY', 'AI_PROXY_URL', 'ZALO_ADMIN_NUMBER'];
   if (!allowedKeys.includes(key)) {
     throw {
       statusCode: 400,
@@ -188,7 +188,7 @@ export async function setConfigsBatch(req: Request, res: Response) {
   }
 
   const allowedKeys = [
-    'GEMINI_API_KEY', 'OPENAI_API_KEY', 'ZALO_ADMIN_NUMBER',
+    'GEMINI_API_KEY', 'OPENAI_API_KEY', 'CLAUDE_API_KEY', 'AI_PROXY_URL', 'ZALO_ADMIN_NUMBER',
     'AI_PROVIDER', 'AI_MODEL',
     'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM'
   ];
@@ -218,7 +218,7 @@ export async function getAllConfigs(req: Request, res: Response) {
   }
 
   const keys = [
-    'GEMINI_API_KEY', 'OPENAI_API_KEY', 'ZALO_ADMIN_NUMBER',
+    'GEMINI_API_KEY', 'OPENAI_API_KEY', 'CLAUDE_API_KEY', 'AI_PROXY_URL', 'ZALO_ADMIN_NUMBER',
     'AI_PROVIDER', 'AI_MODEL',
     'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM'
   ];
@@ -233,6 +233,12 @@ export async function getAllConfigs(req: Request, res: Response) {
 }
 
 
+async function getProxyUrlBase(): Promise<string> {
+  const dbConfig = await SystemConfig.findByPk('AI_PROXY_URL');
+  const url = dbConfig?.value || process.env.AI_PROXY_URL || '';
+  return url ? url.replace(/\/$/, '') : '';
+}
+
 /**
  * Lấy danh sách các model khả dụng từ nhà cung cấp AI
  * GET /api/v1/admin/ai/models
@@ -242,7 +248,7 @@ export async function getAiModels(req: Request, res: Response) {
   let apiKey = String(req.query.apiKey || '');
 
   if (!apiKey || apiKey.startsWith('****')) {
-    const keyName = provider === 'openai' ? 'OPENAI_API_KEY' : 'GEMINI_API_KEY';
+    const keyName = provider === 'openai' ? 'OPENAI_API_KEY' : (provider === 'claude' ? 'CLAUDE_API_KEY' : 'GEMINI_API_KEY');
     const dbConfig = await SystemConfig.findByPk(keyName);
     apiKey = dbConfig?.value || process.env[keyName] || '';
   }
@@ -251,16 +257,43 @@ export async function getAiModels(req: Request, res: Response) {
     throw { statusCode: 400, code: 'VALIDATION_ERROR', message: `Thiếu API Key cho nhà cung cấp ${provider}.` };
   }
 
+  const baseUrl = await getProxyUrlBase();
+
   try {
     if (provider === 'openai') {
-      const response = await axios.get('https://api.openai.com/v1/models', {
+      const url = baseUrl ? `${baseUrl}/models` : 'https://api.openai.com/v1/models';
+      const response = await axios.get(url, {
         headers: { Authorization: `Bearer ${apiKey}` },
         timeout: 10000
       });
       const models = (response.data.data || []).map((m: any) => m.id);
       return sendSuccess(res, models, 'Lấy danh sách model OpenAI thành công.');
+    } else if (provider === 'claude') {
+      try {
+        const url = baseUrl ? `${baseUrl}/v1/models` : 'https://api.anthropic.com/v1/models';
+        const response = await axios.get(url, {
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          timeout: 10000
+        });
+        const models = (response.data.data || []).map((m: any) => m.id);
+        return sendSuccess(res, models, 'Lấy danh sách model Claude thành công.');
+      } catch (e) {
+        // Fallback danh sách model mặc định nếu API của Anthropic lỗi/không hỗ trợ liệt kê
+        const defaultClaudeModels = [
+          'claude-3-5-sonnet-20241022',
+          'claude-3-5-haiku-20241022',
+          'claude-3-opus-20240229'
+        ];
+        return sendSuccess(res, defaultClaudeModels, 'Lấy danh sách model Claude (mặc định) thành công.');
+      }
     } else {
-      const response = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+      const url = baseUrl 
+        ? `${baseUrl}/v1beta/models?key=${apiKey}` 
+        : `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      const response = await axios.get(url, {
         timeout: 10000
       });
       const models = (response.data.models || [])
@@ -270,10 +303,11 @@ export async function getAiModels(req: Request, res: Response) {
     }
   } catch (err: any) {
     console.error('[Admin AI Config] Fetch models error:', err.message);
+    const detailMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message;
     throw {
       statusCode: 500,
       code: 'AI_PROVIDER_ERROR',
-      message: `Không thể kết nối đến ${provider}. Vui lòng kiểm tra lại API Key.`
+      message: `Không thể tải danh sách model từ ${provider}: ${detailMsg}`
     };
   }
 }
@@ -287,7 +321,7 @@ export async function testAiConnection(req: Request, res: Response) {
   let key = String(apiKey || '');
 
   if (!key || key.startsWith('****')) {
-    const keyName = provider === 'openai' ? 'OPENAI_API_KEY' : 'GEMINI_API_KEY';
+    const keyName = provider === 'openai' ? 'OPENAI_API_KEY' : (provider === 'claude' ? 'CLAUDE_API_KEY' : 'GEMINI_API_KEY');
     const dbConfig = await SystemConfig.findByPk(keyName);
     key = dbConfig?.value || process.env[keyName] || '';
   }
@@ -297,11 +331,13 @@ export async function testAiConnection(req: Request, res: Response) {
   }
 
   const prompt = 'Hãy trả lời ngắn gọn từ "pong" (không viết gì thêm).';
-  const targetModel = model || (provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash');
+  const targetModel = model || (provider === 'openai' ? 'gpt-4o-mini' : (provider === 'claude' ? 'claude-3-5-haiku-20241022' : 'gemini-1.5-flash'));
+  const baseUrl = await getProxyUrlBase();
 
   try {
     if (provider === 'openai') {
-      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      const url = baseUrl ? `${baseUrl}/chat/completions` : 'https://api.openai.com/v1/chat/completions';
+      const response = await axios.post(url, {
         model: targetModel,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 10
@@ -314,9 +350,28 @@ export async function testAiConnection(req: Request, res: Response) {
       });
       const answer = response.data.choices?.[0]?.message?.content?.trim() || '';
       return sendSuccess(res, { answer }, 'Kết nối đến OpenAI thành công.');
+    } else if (provider === 'claude') {
+      const url = baseUrl ? `${baseUrl}/v1/messages` : 'https://api.anthropic.com/v1/messages';
+      const response = await axios.post(url, {
+        model: targetModel,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 10
+      }, {
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01'
+        },
+        timeout: 15000
+      });
+      const answer = response.data.content?.[0]?.text?.trim() || '';
+      return sendSuccess(res, { answer }, 'Kết nối đến Claude thành công.');
     } else {
+      const url = baseUrl 
+        ? `${baseUrl}/v1beta/models/${targetModel}:generateContent?key=${key}` 
+        : `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${key}`;
       const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${key}`,
+        url,
         {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { maxOutputTokens: 10 }
@@ -328,10 +383,11 @@ export async function testAiConnection(req: Request, res: Response) {
     }
   } catch (err: any) {
     console.error('[Admin AI Config] Test connection error:', err.message);
+    const detailMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message;
     throw {
       statusCode: 500,
       code: 'AI_PROVIDER_ERROR',
-      message: `Lỗi kết nối AI: ${err.response?.data?.error?.message || err.message}`
+      message: `Lỗi kết nối AI: ${detailMsg}`
     };
   }
 }
@@ -387,7 +443,7 @@ export async function testEmailSend(req: Request, res: Response) {
     } as any);
 
     await transporter.sendMail({
-      from: `"Phong Thủy SIM Cát Hùng [TEST]" <${emailFrom}>`,
+      from: `"DI NHÂN PHONG THỦY SỐ [TEST]" <${emailFrom}>`,
       to: toEmail,
       subject: 'Thư thử nghiệm cấu hình hệ thống',
       html: `
@@ -396,7 +452,7 @@ export async function testEmailSend(req: Request, res: Response) {
             📧 SMTP Cấu Hình Hệ Thống
           </h2>
           <p>Xin chào,</p>
-          <p>Đây là email tự động gửi thử nghiệm từ trang Cấu hình Hệ thống của Phong Thủy SIM Cát Hùng.</p>
+          <p>Đây là email tự động gửi thử nghiệm từ trang Cấu hình Hệ thống của DI NHÂN PHONG THỦY SỐ.</p>
           <p>Nếu bạn nhận được email này, cấu hình SMTP của bạn đã hoạt động chính xác!</p>
           <hr style="border-color: #333; margin: 20px 0;">
           <p style="color: #888; font-size: 12px; text-align: center;">

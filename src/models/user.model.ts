@@ -4,7 +4,7 @@ import sequelize from '@/config/database'
 export interface UserAttributes {
   id?: number
   name: string
-  email: string
+  email?: string | null
   phone: string
   dob: Date
   tob: string
@@ -20,7 +20,7 @@ export interface UserAttributes {
 export class User extends Model<UserAttributes> implements UserAttributes {
   declare id: number
   declare name: string
-  declare email: string
+  declare email: string | null
   declare phone: string
   declare dob: Date
   declare tob: string
@@ -40,7 +40,7 @@ User.init(
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     name: { type: DataTypes.STRING(255), allowNull: false },
-    email: { type: DataTypes.STRING(255), allowNull: false, unique: true },
+    email: { type: DataTypes.STRING(255), allowNull: true, unique: true },
     phone: { type: DataTypes.STRING(20), allowNull: false },
     dob: { type: DataTypes.DATEONLY, allowNull: false },
     tob: { type: DataTypes.STRING(50), allowNull: false },

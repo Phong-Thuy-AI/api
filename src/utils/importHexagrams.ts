@@ -60,8 +60,8 @@ async function importHexagrams() {
 
     // Authenticate and sync model
     await sequelize.authenticate()
-    // Sync specifically the hexagrams table
-    await Hexagram.sync({ alter: true })
+    // Khởi tạo lại toàn bộ bảng và dọn sạch các chỉ mục cũ bị dư thừa trong Local Dev
+    await sequelize.sync({ force: true })
 
     // Loop through 80 hexagrams
     for (let i = 0; i < 80; i++) {

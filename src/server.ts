@@ -29,13 +29,8 @@ async function startServer() {
     await sequelize.authenticate()
     console.log('Database connection has been established successfully.')
 
-    if (process.env.NODE_ENV === 'development') {
-      // Chỉ thay đổi cấu trúc bảng khi đang code (Local Development)
-      await sequelize.sync({ alter: true })
-    } else {
-      // Ở Production, chỉ kết nối kiểm tra thông thường, tránh can thiệp sâu cấu trúc dữ liệu
-      await sequelize.sync()
-    }
+    // Chỉ kiểm tra kết nối hợp lệ, không tự động đồng bộ schema mỗi lần restart để tránh lỗi ER_TOO_MANY_KEYS
+    console.log('Database connection is active.')
     console.log('Database synchronized.')
 
     initCronJobs()
