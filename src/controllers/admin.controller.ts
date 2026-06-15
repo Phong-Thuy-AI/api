@@ -2,10 +2,11 @@ import { Request, Response } from 'express';
 import { Op } from 'sequelize';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
-import { SystemConfig, Order, User, DailyEmailLog } from '@/models';
+import { SystemConfig, Order, User, DailyEmailLog, ChatRoom, ChatMessage } from '@/models';
 import { sendSuccess } from '@/utils/response';
 import { generateAllDailyHoroscopes, sendAllDailyEmails } from '@/services/cron.service';
 import { forcePayOrder } from '@/services/payment.service';
+import { getIO } from '@/services/socket.service';
 
 /**
  * Lưu hoặc cập nhật một giá trị cấu hình hệ thống
@@ -514,4 +515,121 @@ export async function getEmailLogs(req: Request, res: Response) {
   });
 
   return sendSuccess(res, logs, `Lấy danh sách ${logs.length} nhật ký gửi mail thành công.`);
+}
+
+/**
+ * Sinh mã giới thiệu gốc từ họ tên và số đuôi SIM được chốt
+ */
+function generateBaseReferralCode(name: string, lastDigits: string): string {
+  const cleanName = name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z\s]/g, '');
+
+  const words = cleanName.trim().split(/\s+/);
+  const initials = words.map(w => w.charAt(0).toUpperCase()).join('');
+
+  return `${initials}${lastDigits}`;
+}
+
+/**
+ * Đảm bảo mã giới thiệu là duy nhất
+ */
+async function getUniqueReferralCode(baseCode: string): Promise<string> {
+  let uniqueCode = baseCode;
+  let counter = 0;
+  while (true) {
+    const existing = await User.findOne({ where: { referralCode: uniqueCode } });
+    if (!existing) break;
+    counter++;
+    uniqueCode = `${baseCode}${counter}`;
+  }
+  return uniqueCode;
+}
+
+/**
+ * Admin chốt SIM cho khách - tạo mã giới thiệu, tặng 1 tháng tử vi, bắn tin nhắn hệ thống realtime
+ * POST /api/v1/admin/orders/:orderId/confirm-sim
+ */
+export async function confirmSimOrder(req: Request, res: Response) {
+  const orderId = parseInt(String(req.params.orderId), 10);
+  const { lastDigits } = req.body;
+
+  if (isNaN(orderId)) {
+    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Mã đơn hàng không hợp lệ.' };
+  }
+
+  if (!lastDigits || !/^\d{2,3}$/.test(String(lastDigits).trim())) {
+    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Vui lòng nhập đúng 2 hoặc 3 chữ số đuôi SIM.' };
+  }
+
+  const order = await Order.findByPk(orderId, {
+    include: [{ model: User, as: 'user' }]
+  });
+
+  if (!order) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: 'Đơn hàng không tồn tại.' };
+  }
+
+  const user = (order as any).user as User | null;
+  if (!user) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: 'Không tìm thấy khách hàng của đơn hàng này.' };
+  }
+
+  if (user.referralCode) {
+    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Khách hàng này đã được chốt SIM và có mã giới thiệu.' };
+  }
+
+  // 1. Sinh mã giới thiệu duy nhất
+  const baseCode = generateBaseReferralCode(user.name, String(lastDigits).trim());
+  const referralCode = await getUniqueReferralCode(baseCode);
+
+  // 2. Lưu mã giới thiệu và gia hạn thêm 1 tháng (30 ngày) tử vi hằng ngày
+  user.referralCode = referralCode;
+  const now = new Date();
+  const currentExpiry = user.horoscopeExpiresAt;
+  user.horoscopeExpiresAt = currentExpiry && currentExpiry > now
+    ? new Date(currentExpiry.getTime() + 30 * 24 * 60 * 60 * 1000)
+    : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  
+  await user.save();
+
+  // 3. Tìm phòng chat đang active để bắn tin nhắn hệ thống
+  const chatRoom = await ChatRoom.findOne({
+    where: { orderId: order.id, status: 'active' }
+  });
+
+  if (chatRoom) {
+    const systemMessage = `🎁 MÃ GIỚI THIỆU CỦA BẠN: ${referralCode}`;
+    
+    // Lưu tin nhắn vào DB
+    const chatMsg = await ChatMessage.create({
+      roomId: chatRoom.id,
+      senderType: 'system',
+      message: systemMessage
+    });
+
+    // Phát tin nhắn realtime qua Socket
+    try {
+      const io = getIO();
+      io.to(`room_${chatRoom.id}`).emit('receive_message', {
+        id: chatMsg.id,
+        roomId: chatRoom.id,
+        senderType: 'system',
+        message: chatMsg.message,
+        createdAt: chatMsg.createdAt
+      });
+      console.log(`[Socket] Broadcast system confirm_sim message in room_${chatRoom.id}: ${referralCode}`);
+    } catch (err) {
+      console.error('[Socket] Failed to broadcast system message:', err);
+    }
+  }
+
+  return sendSuccess(
+    res,
+    { referralCode, horoscopeExpiresAt: user.horoscopeExpiresAt },
+    'Chốt SIM thành công, đã sinh mã giới thiệu và tặng 1 tháng tử vi hằng ngày miễn phí.'
+  );
 }
