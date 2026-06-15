@@ -7,6 +7,7 @@ import {
   getUsers,
   extendUserSubscription,
   forcePayAdminOrder,
+  confirmSimOrder,
   setConfigsBatch,
   getAllConfigs,
   getAiModels,
@@ -34,6 +35,7 @@ router.post('/trigger-horoscopes', asyncHandler(triggerDailyHoroscopes));
 // Quản lý Đơn hàng
 router.get('/orders', asyncHandler(getOrders));
 router.post('/orders/:orderId/force-pay', asyncHandler(forcePayAdminOrder));
+router.post('/orders/:orderId/confirm-sim', asyncHandler(confirmSimOrder));
 
 // Quản lý Khách hàng
 router.get('/users', asyncHandler(getUsers));

@@ -222,9 +222,6 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     }
     await user.save();
   } else {
-    const baseCode = generateBaseReferralCode(name, cleanPhone);
-    const referralCode = await getUniqueReferralCode(baseCode);
-
     user = await User.create({
       name,
       email: email ? email.trim() : null,
@@ -234,7 +231,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
       menh,
       focusArea: focusArea || null,
       lastCheckResult: checkResultJson,
-      referralCode,
+      referralCode: null,
       referredByCode: referredByCode || null
     });
   }

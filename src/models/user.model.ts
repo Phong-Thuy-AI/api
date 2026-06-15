@@ -45,7 +45,7 @@ User.init(
     dob: { type: DataTypes.DATEONLY, allowNull: false },
     tob: { type: DataTypes.STRING(50), allowNull: false },
     menh: { type: DataTypes.STRING(50), allowNull: false },
-    focusArea: { type: DataTypes.STRING(50), allowNull: true, field: 'focus_area' },
+    focusArea: { type: DataTypes.STRING(255), allowNull: true, field: 'focus_area' },
     lastCheckResult: { type: DataTypes.TEXT, allowNull: true, field: 'last_check_result' },
     referralCode: { type: DataTypes.STRING(50), unique: true, allowNull: true, field: 'referral_code' },
     referredByCode: { type: DataTypes.STRING(50), allowNull: true, field: 'referred_by_code' },
