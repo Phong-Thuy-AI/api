@@ -247,6 +247,7 @@ async function getProxyUrlBase(): Promise<string> {
 export async function getAiModels(req: Request, res: Response) {
   const provider = String(req.query.provider || 'gemini');
   let apiKey = String(req.query.apiKey || '');
+  const queryProxyUrl = req.query.proxyUrl ? String(req.query.proxyUrl) : '';
 
   if (!apiKey || apiKey.startsWith('****')) {
     const keyName = provider === 'openai' ? 'OPENAI_API_KEY' : (provider === 'claude' ? 'CLAUDE_API_KEY' : 'GEMINI_API_KEY');
@@ -258,14 +259,14 @@ export async function getAiModels(req: Request, res: Response) {
     throw { statusCode: 400, code: 'VALIDATION_ERROR', message: `Thiếu API Key cho nhà cung cấp ${provider}.` };
   }
 
-  const baseUrl = await getProxyUrlBase();
+  const baseUrl = queryProxyUrl ? queryProxyUrl.replace(/\/$/, '') : await getProxyUrlBase();
 
   try {
     if (provider === 'openai') {
       const url = baseUrl ? `${baseUrl}/models` : 'https://api.openai.com/v1/models';
       const response = await axios.get(url, {
         headers: { Authorization: `Bearer ${apiKey}` },
-        timeout: 10000
+        timeout: 30000
       });
       const models = (response.data.data || []).map((m: any) => m.id);
       return sendSuccess(res, models, 'Lấy danh sách model OpenAI thành công.');
@@ -277,7 +278,7 @@ export async function getAiModels(req: Request, res: Response) {
             'x-api-key': apiKey,
             'anthropic-version': '2023-06-01'
           },
-          timeout: 10000
+          timeout: 30000
         });
         const models = (response.data.data || []).map((m: any) => m.id);
         return sendSuccess(res, models, 'Lấy danh sách model Claude thành công.');
@@ -295,7 +296,7 @@ export async function getAiModels(req: Request, res: Response) {
         ? `${baseUrl}/v1beta/models?key=${apiKey}` 
         : `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
       const response = await axios.get(url, {
-        timeout: 10000
+        timeout: 30000
       });
       const models = (response.data.models || [])
         .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
@@ -318,7 +319,7 @@ export async function getAiModels(req: Request, res: Response) {
  * POST /api/v1/admin/ai/test-connection
  */
 export async function testAiConnection(req: Request, res: Response) {
-  const { provider, apiKey, model } = req.body;
+  const { provider, apiKey, model, proxyUrl, prompt } = req.body;
   let key = String(apiKey || '');
 
   if (!key || key.startsWith('****')) {
@@ -331,23 +332,23 @@ export async function testAiConnection(req: Request, res: Response) {
     throw { statusCode: 400, code: 'VALIDATION_ERROR', message: `Thiếu API Key cho nhà cung cấp ${provider}.` };
   }
 
-  const prompt = 'Hãy trả lời ngắn gọn từ "pong" (không viết gì thêm).';
+  const targetPrompt = prompt || 'Hãy trả lời ngắn gọn từ "pong" (không viết gì thêm).';
   const targetModel = model || (provider === 'openai' ? 'gpt-4o-mini' : (provider === 'claude' ? 'claude-3-5-haiku-20241022' : 'gemini-1.5-flash'));
-  const baseUrl = await getProxyUrlBase();
+  const baseUrl = proxyUrl ? String(proxyUrl).replace(/\/$/, '') : await getProxyUrlBase();
 
   try {
     if (provider === 'openai') {
       const url = baseUrl ? `${baseUrl}/chat/completions` : 'https://api.openai.com/v1/chat/completions';
       const response = await axios.post(url, {
         model: targetModel,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 10
+        messages: [{ role: 'user', content: targetPrompt }],
+        max_tokens: 1000
       }, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${key}`
         },
-        timeout: 15000
+        timeout: 90000
       });
       const answer = response.data.choices?.[0]?.message?.content?.trim() || '';
       return sendSuccess(res, { answer }, 'Kết nối đến OpenAI thành công.');
@@ -355,15 +356,15 @@ export async function testAiConnection(req: Request, res: Response) {
       const url = baseUrl ? `${baseUrl}/v1/messages` : 'https://api.anthropic.com/v1/messages';
       const response = await axios.post(url, {
         model: targetModel,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 10
+        messages: [{ role: 'user', content: targetPrompt }],
+        max_tokens: 1000
       }, {
         headers: {
           'content-type': 'application/json',
           'x-api-key': key,
           'anthropic-version': '2023-06-01'
         },
-        timeout: 15000
+        timeout: 90000
       });
       const answer = response.data.content?.[0]?.text?.trim() || '';
       return sendSuccess(res, { answer }, 'Kết nối đến Claude thành công.');
@@ -374,10 +375,10 @@ export async function testAiConnection(req: Request, res: Response) {
       const response = await axios.post(
         url,
         {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 10 }
+          contents: [{ parts: [{ text: targetPrompt }] }],
+          generationConfig: { maxOutputTokens: 1000 }
         },
-        { timeout: 15000 }
+        { timeout: 90000 }
       );
       const answer = response.data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
       return sendSuccess(res, { answer }, 'Kết nối đến Gemini thành công.');
@@ -440,7 +441,7 @@ export async function testEmailSend(req: Request, res: Response) {
         user: smtpUser,
         pass: smtpPass
       },
-      timeout: 10000
+      timeout: 30000
     } as any);
 
     await transporter.sendMail({
