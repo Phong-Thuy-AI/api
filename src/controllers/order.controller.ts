@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { Order, User, ChatRoom } from '@/models';
-import { generatePaymentCode, generateQrUrl, pollPaymentStatus, forcePayOrder } from '@/services/payment.service';
+import { generatePaymentCode, generateQrUrl, pollPaymentStatus } from '@/services/payment.service';
 import { sendSuccess } from '@/utils/response';
 import {
   ORDER_PAID, ORDER_COMPLETED,
@@ -267,17 +267,17 @@ export async function completeOrder(req: Request, res: Response) {
  * API Bỏ qua thanh toán đơn hàng (Chỉ dành cho TEST)
  * POST /api/v1/orders/:orderId/bypass-pay
  */
-export async function bypassOrderPayment(req: Request, res: Response) {
-  const orderId = parseInt(String(req.params.orderId), 10);
-  if (isNaN(orderId)) {
-    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Mã đơn hàng không hợp lệ.' };
-  }
+// export async function bypassOrderPayment(req: Request, res: Response) {
+//   const orderId = parseInt(String(req.params.orderId), 10);
+//   if (isNaN(orderId)) {
+//     throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Mã đơn hàng không hợp lệ.' };
+//   }
 
-  const order = await forcePayOrder(orderId);
+//   const order = await forcePayOrder(orderId);
 
-  return sendSuccess(
-    res,
-    { orderId: order.id, status: order.status },
-    'Bỏ qua thanh toán đơn hàng thành công (Chỉ dành cho TEST).'
-  );
-}
+//   return sendSuccess(
+//     res,
+//     { orderId: order.id, status: order.status },
+//     'Bỏ qua thanh toán đơn hàng thành công (Chỉ dành cho TEST).'
+//   );
+// }
