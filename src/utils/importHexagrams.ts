@@ -58,10 +58,10 @@ async function importHexagrams() {
       console.warn(`Warning: Expected 80 cleaned blocks, but found ${cleanedBlocks.length}`)
     }
 
-    // Authenticate and sync model
-    await sequelize.authenticate()
-    // Khởi tạo lại toàn bộ bảng và dọn sạch các chỉ mục cũ bị dư thừa trong Local Dev
-    await sequelize.sync({ force: true })
+    // Sync database tables. Only force drop if --force flag is provided.
+    const isForce = process.argv.includes('--force')
+    await sequelize.sync({ force: isForce })
+    console.log(isForce ? 'Database synchronized with FORCE (all tables recreated).' : 'Database synchronized.')
 
     // Loop through 80 hexagrams
     for (let i = 0; i < 80; i++) {

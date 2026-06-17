@@ -210,7 +210,7 @@ export async function forcePayOrder(orderId: number): Promise<Order> {
   const t = await sequelize.transaction();
   try {
     order.status = 'paid';
-    order.web2mTransactionId = 'TEST_BYPASS_' + Date.now();
+    order.web2mTransactionId = 'MANUAL_' + Date.now();
     order.paidAt = new Date();
     await order.save({ transaction: t });
 

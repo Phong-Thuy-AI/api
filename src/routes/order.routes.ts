@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createOrder, checkOrderPaymentStatus, completeOrder, bypassOrderPayment } from '@/controllers/order.controller';
+import { createOrder, checkOrderPaymentStatus, completeOrder } from '@/controllers/order.controller';
 import { requireAdmin, requireUserOrAdmin } from '@/middlewares/auth.middleware';
 import { asyncHandler } from '@/utils/asyncHandler';
 
@@ -15,6 +15,6 @@ router.get('/:orderId/status', requireUserOrAdmin, asyncHandler(checkOrderPaymen
 router.patch('/:orderId/complete', requireAdmin, asyncHandler(completeOrder));
 
 // Bỏ qua thanh toán đơn hàng (Chỉ dành cho TEST - sẽ gỡ khi deploy)
-router.post('/:orderId/bypass-pay', requireUserOrAdmin, asyncHandler(bypassOrderPayment));
+// router.post('/:orderId/bypass-pay', requireUserOrAdmin, asyncHandler(bypassOrderPayment));
 
 export default router;
