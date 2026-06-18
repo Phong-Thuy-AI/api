@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/utils/migrateEmailOptional.js && node dist/utils/migrateFocusArea.js && node dist/server.js",
     "db:import": "ts-node-dev -r tsconfig-paths/register src/utils/importHexagrams.ts",
     "migrate:email-optional": "ts-node -r tsconfig-paths/register src/utils/migrateEmailOptional.ts",
