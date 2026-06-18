@@ -13,7 +13,11 @@ async function runMigration() {
 
     console.log('--- MIGRATION HOÀN THÀNH ---');
     process.exit(0);
-  } catch (error) {
+  } catch (error: any) {
+    if (error.original && error.original.code === 'ER_NO_SUCH_TABLE') {
+      console.log("⚠️ Bảng 'users' chưa tồn tại. Bỏ qua migration này (sẽ được tạo tự động khi chạy import/sync).");
+      process.exit(0);
+    }
     console.error('❌ LỖI TRONG QUÁ TRÌNH MIGRATION:', error);
     process.exit(1);
   }
