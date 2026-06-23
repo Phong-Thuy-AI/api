@@ -1,0 +1,8 @@
+node_modules
+dist
+nginx/certs
+logs
+.env
+.git
+.gitignore
+*.md
