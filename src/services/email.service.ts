@@ -31,6 +31,9 @@ async function getTransporterAndFrom() {
     auth: {
       user: config.user,
       pass: config.pass
+    },
+    tls: {
+      rejectUnauthorized: false
     }
   });
 

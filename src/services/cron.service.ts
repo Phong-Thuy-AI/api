@@ -5,10 +5,11 @@ import { generateDailyHoroscope } from '@/services/ai.service';
 import { sendDailyHoroscope } from '@/services/email.service';
 import { checkAllPendingOrders } from '@/services/payment.service';
 import { MENH_LIST, FOCUS_AREAS } from '@/utils/constants';
+import { calculateLifePath, calculatePersonalVibrations, getCurrentPinnacle } from '@/utils/numerology';
 
 /**
- * Tạo cache 25 bản tử vi (5 Mệnh × 5 Vấn đề) cho ngày hôm nay.
- * Upsert vào bảng daily_horoscopes (unique index: date + menh + focus_area).
+ * Tạo tử vi hằng ngày cá nhân hóa cho từng User có gói đăng ký còn hiệu lực.
+ * Upsert vào bảng daily_horoscopes (unique index: date + user_id).
  */
 export async function generateAllDailyHoroscopes(): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
@@ -16,41 +17,80 @@ export async function generateAllDailyHoroscopes(): Promise<void> {
     day: '2-digit', month: '2-digit', year: 'numeric'
   });
 
-  console.log(`[Cron] Generating 25 daily horoscopes for ${today}...`);
+  // Tìm tất cả user có subscription còn hiệu lực
+  const activeUsers = await User.findAll({
+    where: {
+      horoscopeExpiresAt: { [Op.gt]: new Date() },
+      focusArea: { [Op.not]: null }
+    }
+  });
+
+  if (activeUsers.length === 0) {
+    console.log(`[Cron] No active subscribers to generate personalized horoscopes for today (${today}).`);
+    return;
+  }
+
+  console.log(`[Cron] Generating personalized daily horoscopes for ${activeUsers.length} active users on ${today}...`);
   let successCount = 0;
 
-  for (const menh of MENH_LIST) {
-    for (const focusArea of FOCUS_AREAS) {
-      try {
-        // Kiểm tra xem đã có bản tử vi lưu trong DB chưa để tránh gọi AI trùng lặp
-        const existing = await DailyHoroscope.findOne({
-          where: { date: today, menh, focusArea }
-        });
-        if (existing && existing.content) {
-          console.log(`[Cron] Horoscope already cached for ${menh} / ${focusArea}, skipping AI call.`);
-          successCount++;
-          continue;
-        }
-
-        const content = await generateDailyHoroscope(menh, focusArea, dateStr);
-        if (!content) {
-          console.warn(`[Cron] AI returned null for ${menh}/${focusArea}, skipping.`);
-          continue;
-        }
-
-        await DailyHoroscope.upsert({ date: today, menh, focusArea, content });
+  for (const user of activeUsers) {
+    try {
+      // Kiểm tra xem đã có bản tử vi lưu trong DB chưa để tránh gọi AI trùng lặp
+      const existing = await DailyHoroscope.findOne({
+        where: { date: today, userId: user.id }
+      });
+      if (existing && existing.content) {
+        console.log(`[Cron] Horoscope already cached for User ${user.id} (${user.name}), skipping AI call.`);
         successCount++;
-        console.log(`[Cron] Saved horoscope: ${menh} / ${focusArea}`);
-
-        // Delay 6 giây giữa các lần gọi AI để tránh dính hạn mức 15 RPM của Gemini Free Tier
-        await new Promise(r => setTimeout(r, 6000));
-      } catch (err) {
-        console.error(`[Cron] Error generating ${menh}/${focusArea}:`, err);
+        continue;
       }
+
+      // Lấy thông tin ngày sinh
+      const dobStr = typeof user.dob === 'string' ? user.dob : new Date(user.dob).toISOString().slice(0, 10);
+
+      // Tính toán chỉ số thần số học hằng ngày
+      const { lifePath, reducedLifePath } = calculateLifePath(dobStr);
+      const targetDate = new Date();
+      const { personalYear, personalMonth, personalDay } = calculatePersonalVibrations(dobStr, targetDate);
+      const currentPinnacle = getCurrentPinnacle(dobStr, reducedLifePath, targetDate);
+
+      const content = await generateDailyHoroscope({
+        name: user.name,
+        menh: user.menh,
+        focusArea: user.focusArea!,
+        dateStr,
+        lifePath,
+        personalYear,
+        personalMonth,
+        personalDay,
+        currentPinnacle,
+        tob: user.tob
+      });
+
+      if (!content) {
+        console.warn(`[Cron] AI returned null for User ${user.id} (${user.name}), skipping.`);
+        continue;
+      }
+
+      await DailyHoroscope.upsert({
+        date: today,
+        menh: user.menh,
+        focusArea: user.focusArea!,
+        content,
+        userId: user.id
+      });
+
+      successCount++;
+      console.log(`[Cron] Saved personalized horoscope for User ${user.id} (${user.name})`);
+
+      // Delay 6 giây giữa các lần gọi AI để tránh dính hạn mức 15 RPM của Gemini Free Tier
+      await new Promise(r => setTimeout(r, 6000));
+    } catch (err) {
+      console.error(`[Cron] Error generating personalized horoscope for User ${user.id} (${user.name}):`, err);
     }
   }
 
-  console.log(`[Cron] Horoscope generation done: ${successCount}/25 saved.`);
+  console.log(`[Cron] Horoscope generation done: ${successCount}/${activeUsers.length} saved.`);
 }
 
 /**
@@ -81,17 +121,17 @@ export async function sendAllDailyEmails(): Promise<void> {
   for (const user of activeUsers) {
     try {
       const horoscope = await DailyHoroscope.findOne({
-        where: { date: today, menh: user.menh, focusArea: user.focusArea! }
+        where: { date: today, userId: user.id }
       });
 
       if (!horoscope) {
-        console.warn(`[Cron] No horoscope found for ${user.menh}/${user.focusArea}, skipping ${user.email!}.`);
+        console.warn(`[Cron] No personalized horoscope found in DB for User ${user.id} (${user.name}), skipping email.`);
         await DailyEmailLog.create({
           userId: user.id,
           email: user.email!,
           date: today,
           status: 'failed',
-          error: `Không tìm thấy nội dung tử vi cho ${user.menh} / ${user.focusArea}`,
+          error: `Không tìm thấy nội dung tử vi cá nhân hóa cho User ${user.id}`,
           sentAt: new Date()
         });
         continue;
@@ -99,7 +139,7 @@ export async function sendAllDailyEmails(): Promise<void> {
 
       await sendDailyHoroscope(user.email!, user.name, user.menh, horoscope.content, dateStr);
       sentCount++;
-      console.log(`[Cron] Sent horoscope email to ${user.email!}`);
+      console.log(`[Cron] Sent personalized horoscope email to ${user.email!}`);
 
       await DailyEmailLog.create({
         userId: user.id,
