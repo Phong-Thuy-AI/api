@@ -3,9 +3,6 @@
 Tài liệu này hướng dẫn chi tiết quy trình cấu hình, chuẩn bị và khởi chạy dự án Backend bằng Docker & Nginx Reverse Proxy trên VPS lần đầu tiên, cũng như cách cập nhật code sau này.
 
 ---
-tuandt/Tuandoan@240498
-
-acount: admin/Tranlai0711
 
 ## 📂 I. Các File Cần Cấu Hình
 
