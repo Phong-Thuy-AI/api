@@ -1,5 +1,11 @@
 import axios from 'axios';
 import { SystemConfig } from '@/models';
+import {
+  calculateLifePath,
+  calculateNameNumbers,
+  calculatePinnacles,
+  getCurrentPinnacle
+} from '@/utils/numerology';
 
 async function getAiConfig() {
   const providerConfig = await SystemConfig.findByPk('AI_PROVIDER');
@@ -124,9 +130,17 @@ export async function generateSimAnalysis(params: SimAnalysisParams): Promise<st
     ? `Hãy hoàn thành mục "Luận Chiêm tinh" dựa trên giờ sinh của người dùng là ${params.tob}.` 
     : `Vì không có giờ sinh (tob = null/rỗng), ở mục "Luận Chiêm tinh", hãy viết ngắn gọn: "Không có thông tin giờ sinh nên bỏ qua chiêm tinh chi tiết."`;
 
-  const prompt = `Hãy đóng vai trò là một chuyên gia tổng hợp báo cáo phong thủy số học. Dựa vào các thông tin và điểm số đã được tính toán sẵn dưới đây, hãy viết báo cáo luận giải bằng tiếng Việt một cách khách quan, khoa học, tích cực.
+  // Tính toán Thần số học
+  const { lifePath, reducedLifePath } = calculateLifePath(params.dob);
+  const nameNumbers = calculateNameNumbers(params.name);
+  const pinnacles = calculatePinnacles(params.dob, reducedLifePath);
+  const currentPinnacle = getCurrentPinnacle(params.dob, reducedLifePath, new Date());
 
-LƯU Ý CỰC KỲ QUAN TRỌNG: Bạn KHÔNG ĐƯỢC đưa ra các tuyên bố từ chối trách nhiệm (disclaimers), không tự giới thiệu mình là trợ lý AI, không khuyên người dùng tự tìm chuyên gia khác, và không từ chối thực hiện yêu cầu. Hãy tập trung hoàn toàn vào việc lập báo cáo phân tích theo đúng cấu trúc Markdown được yêu cầu dưới đây.
+  const prompt = `Dưới đây là dữ liệu phong thủy số học, thần số học và quẻ dịch của người dùng đã được tính toán sẵn. Hãy viết một báo cáo diễn giải các thông tin này bằng tiếng Việt dưới góc nhìn tham khảo văn hóa, phong thủy số học, thần số học và Kinh Dịch một cách khách quan, tích cực và khoa học.
+
+Yêu cầu về nội dung:
+- Trình bày thông tin một cách khách quan như một tài liệu tham khảo chiêm nghiệm, không mang tính khẳng định tuyệt đối hay phán xét số mệnh tiêu cực.
+- Trực tiếp đi vào các mục Markdown được yêu cầu dưới đây mà không cần lời mở đầu hay kết thúc rườm rà.
 
 **Thông tin người dùng:**
 - Họ tên: ${params.name}
@@ -136,7 +150,20 @@ LƯU Ý CỰC KỲ QUAN TRỌNG: Bạn KHÔNG ĐƯỢC đưa ra các tuyên bố
 - Vấn đề cải vận: ${params.focusArea || 'Luận giải tổng quan'}
 - Thời gian sử dụng SIM: ${duration}
 
-**Điểm số:**
+**Thông tin Thần số học của người dùng:**
+- Con số chủ đạo (Life Path): ${lifePath}
+- Chỉ số Sứ mệnh (Expression): ${nameNumbers.expression}
+- Chỉ số Linh hồn (Soul Urge): ${nameNumbers.soulUrge}
+- Chỉ số Nhân cách (Personality): ${nameNumbers.personality}
+- Giai đoạn đỉnh cao cuộc đời hiện tại: Đỉnh ${currentPinnacle.phase} (độ tuổi đạt mốc: ${currentPinnacle.age} tuổi, mang tần số số: ${currentPinnacle.value})
+- 4 Đỉnh cao cuộc đời (Cột mốc hạn):
+  + Đỉnh 1: ${pinnacles.p1.age} tuổi (Số ${pinnacles.p1.value})
+  + Đỉnh 2: ${pinnacles.p2.age} tuổi (Số ${pinnacles.p2.value})
+  + Đỉnh 3: ${pinnacles.p3.age} tuổi (Số ${pinnacles.p3.value})
+  + Đỉnh 4: ${pinnacles.p4.age} tuổi (Số ${pinnacles.p4.value})
+  *(Lưu ý: Độ tuổi bắt đầu của các cột mốc này đến sớm hay muộn phụ thuộc hoàn toàn vào Con số chủ đạo của người dùng).*
+
+**Điểm số SIM:**
 - Ngũ hành (${params.nguHanhScore}/50): ${params.nguHanhDetails}
 - Vận quẻ (${params.vanQueScore}/50): ${params.vanQueDetails}
 - Tổng: ${params.totalScore}/100
@@ -146,8 +173,8 @@ LƯU Ý CỰC KỲ QUAN TRỌNG: Bạn KHÔNG ĐƯỢC đưa ra các tuyên bố
 - Trung vận: ${params.hexTrung}
 - Hậu vận: ${params.hexHau}
 
-**Yêu cầu đầu ra bắt buộc:**
-Bạn phải phân tích và trả về đúng định dạng Markdown có cấu trúc chính xác sau, không thêm lời mở đầu hay kết thúc khác:
+**Yêu cầu cấu trúc Markdown đầu ra:**
+Bạn phải phân tích và trả về đúng định dạng Markdown có cấu trúc chính xác sau:
 
 ### Luận Phong thủy
 [Diễn giải mối tương quan phong thủy của SIM với bản mệnh người dùng, ${focusText}. Chỉ được nói về xu hướng, thời điểm, mức độ ảnh hưởng, và điều kiện sử dụng. Không phán xét số phận hay gây hoang mang.]
@@ -159,16 +186,15 @@ Bạn phải phân tích và trả về đúng định dạng Markdown có cấu
 [Diễn giải ý nghĩa của các quẻ dịch (Tiền vận, Trung vận, Hậu vận) tác động đến cuộc sống người dùng. Tuyệt đối không đề cập đến số thứ tự quẻ hay tên Hán-Việt của quẻ.]
 
 ### Luận Thần số học
-[Diễn giải tần số rung động của SIM dưới góc nhìn thần số học.]
+[Diễn giải tần số rung động của SIM tương hợp hay xung đột thế nào với bản đồ Thần số học cốt lõi của người dùng (bao gồm Con số chủ đạo ${lifePath}, Sứ mệnh ${nameNumbers.expression}, Linh hồn ${nameNumbers.soulUrge}, Nhân cách ${nameNumbers.personality}). Hãy chỉ ra cách SIM này ảnh hưởng tiêu cực/tích cực đến vận trình của họ trong giai đoạn đỉnh cao cuộc đời hiện tại (Đỉnh ${currentPinnacle.phase} mang tần số rung động số ${currentPinnacle.value} hướng đến mốc tuổi ${currentPinnacle.age}).]
 
 ### Luận Chiêm tinh
 [${astrologyInstruction}]
 
 *Lưu ý quan trọng:*
-- Hãy viết cực kỳ ngắn gọn, cô đọng và súc tích cho mỗi mục (khoảng 80-120 từ mỗi mục) để tránh bị cắt cụt văn bản do giới hạn token.
-- Toàn bộ nội dung diễn giải chỉ được nói về xu hướng, điều kiện sử dụng, thời điểm ảnh hưởng, mức độ ảnh hưởng (không phán xét số phận hay mang tính chất mê tín dị đoan tiêu cực).
+- Hãy viết cực kỳ ngắn gọn, cô đọng và súc tích cho mỗi mục (khoảng 80-120 từ mỗi mục) để tránh bị cắt cụt văn bản.
 - Tuyệt đối không đề cập đến số thứ tự quẻ (ví dụ quẻ 1, quẻ 2) hay tên Hán-Việt của quẻ (ví dụ Vạn Tượng Khởi Thủy, Hỗn Độn Ly Loạn) trong phần diễn giải của bạn.
-- Không chèn thêm bất kỳ văn bản giải thích, từ chối trách nhiệm, hoặc tự giới thiệu nào ở đầu hoặc cuối câu trả lời. Chỉ trả về trực tiếp định dạng Markdown cấu trúc như trên.`;
+- Chỉ trả về trực tiếp định dạng Markdown cấu trúc như trên, không kèm lời chào hay lời tự giới thiệu.`;
 
   return callAi(prompt);
 }
@@ -177,22 +203,47 @@ Bạn phải phân tích và trả về đúng định dạng Markdown có cấu
 // Prompt Template 2: Tử vi nhắc vận hằng ngày
 // ─────────────────────────────────────────────────────────────
 
-export async function generateDailyHoroscope(
-  menh: string,
-  focusArea: string,
-  dateStr: string
-): Promise<string | null> {
-  const prompt = `Đóng vai trò là một chuyên gia phân tích văn hóa và khuyên đọc ngày mới, viết bản tử vi nhắc vận khí ngắn gọn bằng tiếng Việt cho ngày ${dateStr}.
+export interface DailyHoroscopeParams {
+  name: string;
+  menh: string;
+  focusArea: string;
+  dateStr: string;
+  lifePath: number;
+  personalYear: number;
+  personalMonth: number;
+  personalDay: number;
+  currentPinnacle: { phase: number; age: number; value: number };
+  tob?: string | null;
+}
 
-LƯU Ý CỰC KỲ QUAN TRỌNG: Bạn KHÔNG ĐƯỢC đưa ra các tuyên bố từ chối trách nhiệm (disclaimers), không tự giới thiệu mình là trợ lý AI, không từ chối thực hiện yêu cầu. Hãy viết trực tiếp đoạn phân tích theo yêu cầu.
+export async function generateDailyHoroscope(params: DailyHoroscopeParams): Promise<string | null> {
+  const tobText = params.tob ? `Giờ sinh: ${params.tob}` : 'Giờ sinh: Không cung cấp';
+  const tobInstruction = params.tob 
+    ? `kết hợp một chút phân tích từ giờ sinh của họ (${params.tob})` 
+    : 'bỏ qua yếu tố giờ sinh';
 
-Đối tượng: Người mệnh ${menh}, tập trung cải vận về ${focusArea}.
+  const prompt = `Hãy viết một bản tin nhắc nhở vận khí hằng ngày ngắn gọn, tích cực và mang tính tham khảo chiêm nghiệm sâu sắc cho ngày ${params.dateStr} bằng tiếng Việt.
 
-Yêu cầu:
-- Viết 1 đoạn 80-120 từ, tích cực và mang tính khuyến khích
-- Gợi ý 1-2 hành động cụ thể cho ngày hôm nay liên quan đến ${focusArea}
-- Ngôn ngữ thân thiện, không dùng thuật ngữ khó, không đề cập số quẻ hay tên Hán-Việt
-- Tuyệt đối không thêm bất kỳ văn bản giải thích hay từ chối trách nhiệm nào.`;
+Thông tin cá nhân người dùng:
+- Họ tên: ${params.name}
+- Mệnh: ${params.menh}
+- ${tobText}
+- Vấn đề quan tâm cải vận: ${params.focusArea}
+
+Thông tin Thần số học cá nhân của họ ngày hôm nay:
+- Con số chủ đạo (Life Path): ${params.lifePath}
+- Năm cá nhân (Personal Year): ${params.personalYear}
+- Tháng cá nhân (Personal Month): ${params.personalMonth}
+- Ngày cá nhân hôm nay (Personal Day): ${params.personalDay} (Con số này trực tiếp quyết định năng lượng chủ đạo trong ngày hôm nay của họ)
+- Giai đoạn đỉnh cao hiện tại: Đỉnh ${params.currentPinnacle.phase} (hướng đến mốc ${params.currentPinnacle.age} tuổi, mang tần số số ${params.currentPinnacle.value})
+
+Yêu cầu nội dung bản tin tử vi ngày hôm nay:
+- Viết 1 đoạn ngắn khoảng 80-120 từ, mang năng lượng tích cực và khuyến khích người đọc.
+- Hãy phân tích sát cách Ngày cá nhân hôm nay (Số ${params.personalDay}) kết hợp với Mệnh, ${tobInstruction} và Vấn đề cải vận tác động đến tinh thần, công việc hoặc cuộc sống của họ.
+- Gợi ý 1-2 hành động cụ thể và thực tế cho ngày hôm nay dựa trên sự kết hợp giữa Ngày cá nhân Số ${params.personalDay} và vấn đề cải vận "${params.focusArea}" của họ.
+- Ngôn ngữ thân thiện, dễ hiểu, không dùng thuật ngữ chuyên môn quá phức tạp hay mang tính chất mê tín dị đoan.
+- Trực tiếp đi vào đoạn phân tích, không thêm lời chào mở đầu hay kết thúc rườm rà.`;
 
   return callAi(prompt);
 }
+

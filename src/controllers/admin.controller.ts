@@ -441,6 +441,9 @@ export async function testEmailSend(req: Request, res: Response) {
         user: smtpUser,
         pass: smtpPass
       },
+      tls: {
+        rejectUnauthorized: false
+      },
       timeout: 30000
     } as any);
 

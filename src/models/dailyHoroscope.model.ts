@@ -7,6 +7,7 @@ export interface DailyHoroscopeAttributes {
   menh: string
   focusArea: string
   content: string
+  userId?: number | null
 }
 
 export class DailyHoroscope extends Model<DailyHoroscopeAttributes> implements DailyHoroscopeAttributes {
@@ -15,6 +16,7 @@ export class DailyHoroscope extends Model<DailyHoroscopeAttributes> implements D
   declare menh: string
   declare focusArea: string
   declare content: string
+  declare userId: number | null
 
   declare readonly createdAt: Date
   declare readonly updatedAt: Date
@@ -36,13 +38,18 @@ DailyHoroscope.init(
       allowNull: false
     },
     focusArea: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.STRING(255),
       allowNull: false,
       field: 'focus_area'
     },
     content: {
       type: DataTypes.TEXT,
       allowNull: false
+    },
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'user_id'
     }
   },
   {
@@ -52,7 +59,7 @@ DailyHoroscope.init(
     indexes: [
       {
         unique: true,
-        fields: ['date', 'menh', 'focus_area']
+        fields: ['date', 'user_id']
       }
     ]
   }

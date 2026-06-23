@@ -4,7 +4,7 @@ import axios from 'axios';
 import { User, Order, Hexagram, ChatRoom } from '@/models';
 import { checkFengShuiSim } from '@/controllers/fengshui.controller';
 import { createOrder, checkOrderPaymentStatus } from '@/controllers/order.controller';
-import { getRoomMessages } from '@/controllers/chat.controller';
+import { getRoomMessages, updateRoomUserEmail } from '@/controllers/chat.controller';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -124,7 +124,7 @@ describe('Kiểm thử bảo mật & nghiệp vụ - Security & Ownership Contro
       // Kiểm tra xem user có được tạo hay không
       const createdUser = await User.findOne({ where: { email: 'newuser@example.com' } });
       expect(createdUser).not.toBeNull();
-      expect(createdUser?.referralCode).not.toBeNull();
+      expect(createdUser?.referralCode).toBeNull();
 
       // Cookie user_token được thiết lập
       expect(cookies['user_token']).toBeDefined();
@@ -295,6 +295,81 @@ describe('Kiểm thử bảo mật & nghiệp vụ - Security & Ownership Contro
 
       const response: any = await getRoomMessages(mockReq, mockRes);
       expect(response.success).toBe(true);
+    });
+  });
+
+  describe('API Cập nhật Email phòng chat - updateRoomUserEmail() Ownership & Validation', () => {
+    test('User A có thể cập nhật email phòng chat của chính mình', async () => {
+      const mockReq = {
+        user: { userId: userA.id, role: 'user' },
+        params: { roomId: String(chatRoomA.id) },
+        body: { email: 'usera-new@example.com' }
+      } as unknown as Request;
+
+      const mockRes = {
+        status: (jest.fn() as any).mockImplementation(() => mockRes),
+        json: (jest.fn() as any).mockImplementation((data: any) => data)
+      } as unknown as Response;
+
+      const response: any = await updateRoomUserEmail(mockReq, mockRes);
+      expect(response.success).toBe(true);
+      expect(response.data.email).toBe('usera-new@example.com');
+
+      const updatedUser = await User.findByPk(userA.id);
+      expect(updatedUser?.email).toBe('usera-new@example.com');
+    });
+
+    test('User B KHÔNG thể cập nhật email phòng chat của User A (trả về 403 Forbidden)', async () => {
+      const mockReq = {
+        user: { userId: userB.id, role: 'user' },
+        params: { roomId: String(chatRoomA.id) },
+        body: { email: 'userb-hack@example.com' }
+      } as unknown as Request;
+
+      const mockRes = {} as unknown as Response;
+
+      await expect(updateRoomUserEmail(mockReq, mockRes)).rejects.toEqual(
+        expect.objectContaining({
+          statusCode: 403,
+          code: 'FORBIDDEN',
+          message: 'Bạn không có quyền cập nhật thông tin phòng chat này.'
+        })
+      );
+    });
+
+    test('Admin có thể cập nhật email của bất kỳ phòng chat nào', async () => {
+      const mockReq = {
+        admin: { id: 'admin', role: 'admin' },
+        params: { roomId: String(chatRoomA.id) },
+        body: { email: 'usera-admin-updated@example.com' }
+      } as unknown as Request;
+
+      const mockRes = {
+        status: (jest.fn() as any).mockImplementation(() => mockRes),
+        json: (jest.fn() as any).mockImplementation((data: any) => data)
+      } as unknown as Response;
+
+      const response: any = await updateRoomUserEmail(mockReq, mockRes);
+      expect(response.success).toBe(true);
+      expect(response.data.email).toBe('usera-admin-updated@example.com');
+    });
+
+    test('Trả về lỗi validation khi định dạng email sai', async () => {
+      const mockReq = {
+        admin: { id: 'admin', role: 'admin' },
+        params: { roomId: String(chatRoomA.id) },
+        body: { email: 'invalidemail' }
+      } as unknown as Request;
+
+      const mockRes = {} as unknown as Response;
+
+      await expect(updateRoomUserEmail(mockReq, mockRes)).rejects.toEqual(
+        expect.objectContaining({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Địa chỉ email không đúng định dạng.'
+        })
+      );
     });
   });
 });

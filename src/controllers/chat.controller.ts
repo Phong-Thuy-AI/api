@@ -20,7 +20,7 @@ export async function getActiveRooms(req: Request, res: Response) {
           {
             model: User,
             as: 'user',
-            attributes: ['id', 'name', 'phone', 'menh']
+            attributes: ['id', 'name', 'phone', 'menh', 'email', 'referralCode']
           }
         ]
       }
@@ -88,7 +88,20 @@ export async function getRoomMessages(req: Request, res: Response) {
   }
 
   const chatRoom = await ChatRoom.findByPk(roomId, {
-    include: [{ model: Order, as: 'order', attributes: ['id', 'packageType', 'userId', 'carrier', 'consultationTopic'] }]
+    include: [
+      {
+        model: Order,
+        as: 'order',
+        attributes: ['id', 'packageType', 'userId', 'carrier', 'consultationTopic'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['id', 'name', 'phone', 'menh', 'email', 'referralCode']
+          }
+        ]
+      }
+    ]
   });
 
   if (!chatRoom) {
@@ -120,5 +133,90 @@ export async function getRoomMessages(req: Request, res: Response) {
     res,
     { room: chatRoom, messages },
     `Lấy ${messages.length} tin nhắn trong phòng chat thành công.`
+  );
+}
+
+/**
+ * Cập nhật email của khách hàng liên kết với phòng chat
+ * POST /api/v1/chats/rooms/:roomId/email
+ * Yêu cầu: requireUserOrAdmin
+ */
+export async function updateRoomUserEmail(req: Request, res: Response) {
+  const roomId = parseInt(String(req.params.roomId), 10);
+  const { email } = req.body;
+
+  if (isNaN(roomId)) {
+    throw {
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'Mã phòng chat không hợp lệ.'
+    };
+  }
+
+  if (!email) {
+    throw {
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'Email không được để trống.'
+    };
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw {
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'Địa chỉ email không đúng định dạng.'
+    };
+  }
+
+  const chatRoom = await ChatRoom.findByPk(roomId, {
+    include: [{ model: Order, as: 'order' }]
+  });
+
+  if (!chatRoom) {
+    throw {
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'Phòng chat không tồn tại.'
+    };
+  }
+
+  const order = (chatRoom as any).order as Order;
+  if (!order) {
+    throw {
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'Không tìm thấy đơn hàng liên kết với phòng chat này.'
+    };
+  }
+
+  // Kiểm tra quyền: Nếu là user thường thì phải đúng là người sở hữu đơn hàng
+  if (req.user && !req.admin) {
+    if (order.userId !== req.user.userId) {
+      throw {
+        statusCode: 403,
+        code: 'FORBIDDEN',
+        message: 'Bạn không có quyền cập nhật thông tin phòng chat này.'
+      };
+    }
+  }
+
+  const user = await User.findByPk(order.userId);
+  if (!user) {
+    throw {
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'Không tìm thấy thông tin khách hàng.'
+    };
+  }
+
+  user.email = email.trim();
+  await user.save();
+
+  return sendSuccess(
+    res,
+    { email: user.email },
+    'Cập nhật email khách hàng thành công.'
   );
 }

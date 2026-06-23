@@ -11,6 +11,10 @@ async function runMigration() {
     await sequelize.query('ALTER TABLE users MODIFY COLUMN focus_area VARCHAR(255) NULL;');
     console.log('✅ Đã cập nhật thành công cột `focus_area` trong bảng `users` thành VARCHAR(255).');
 
+    // Thay đổi cột focus_area trong bảng daily_horoscopes thành VARCHAR(255)
+    await sequelize.query('ALTER TABLE daily_horoscopes MODIFY COLUMN focus_area VARCHAR(255) NOT NULL;');
+    console.log('✅ Đã cập nhật thành công cột `focus_area` trong bảng `daily_horoscopes` thành VARCHAR(255).');
+
     console.log('--- MIGRATION HOÀN THÀNH ---');
     process.exit(0);
   } catch (error: any) {
