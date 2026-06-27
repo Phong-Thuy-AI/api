@@ -6,6 +6,7 @@ import {
   getOrders,
   getUsers,
   extendUserSubscription,
+  resetUserChecks,
   forcePayAdminOrder,
   confirmSimOrder,
   setConfigsBatch,
@@ -40,6 +41,7 @@ router.post('/orders/:orderId/confirm-sim', asyncHandler(confirmSimOrder));
 // Quản lý Khách hàng
 router.get('/users', asyncHandler(getUsers));
 router.patch('/users/:userId/extend', asyncHandler(extendUserSubscription));
+router.post('/users/:userId/reset-checks', asyncHandler(resetUserChecks));
 
 // Kiểm tra kết nối AI & Email
 router.get('/ai/models', asyncHandler(getAiModels));

@@ -129,7 +129,60 @@ export async function getUsers(req: Request, res: Response) {
     order: [['createdAt', 'DESC']]
   });
 
-  return sendSuccess(res, users, `Lấy danh sách ${users.length} khách hàng thành công.`);
+  // Đếm số lượt check cho mỗi user (cùng name + dob)
+  const usersWithCheckCount = await Promise.all(
+    users.map(async (u) => {
+      const checkCount = await User.count({
+        where: {
+          name: u.name,
+          dob: u.dob
+        }
+      });
+      return {
+        ...u.toJSON(),
+        checkCount
+      };
+    })
+  );
+
+  return sendSuccess(res, usersWithCheckCount, `Lấy danh sách ${users.length} khách hàng thành công.`);
+}
+
+/**
+ * Reset lượt check cho khách hàng (xóa các lượt check không có đơn hàng)
+ * POST /api/v1/admin/users/:userId/reset-checks
+ */
+export async function resetUserChecks(req: Request, res: Response) {
+  const userId = parseInt(String(req.params.userId), 10);
+  if (isNaN(userId)) {
+    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Mã khách hàng không hợp lệ.' };
+  }
+
+  const user = await User.findByPk(userId);
+  if (!user) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: 'Khách hàng không tồn tại.' };
+  }
+
+  const { name, dob } = user;
+  const sisterUsers = await User.findAll({ where: { name, dob } });
+  let deletedCount = 0;
+
+  for (const sister of sisterUsers) {
+    // Chỉ xóa các lượt check khác của người này nếu không có đơn hàng nào liên kết
+    const orderCount = await Order.count({ where: { userId: sister.id } });
+    if (orderCount === 0 && sister.id !== user.id) {
+      await sister.destroy();
+      deletedCount++;
+    }
+  }
+
+  const newCheckCount = await User.count({ where: { name, dob } });
+
+  return sendSuccess(
+    res,
+    { userId, newCheckCount, deletedCount },
+    `Đã giải phóng ${deletedCount} lượt check cũ. Số lượt check hiện tại là ${newCheckCount}/5.`
+  );
 }
 
 /**

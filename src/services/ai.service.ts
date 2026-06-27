@@ -108,6 +108,7 @@ export interface SimAnalysisParams {
   dob: string;
   tob?: string | null;
   menh: string;
+  menhNien: string;
   focusArea?: string | null;
   usedLessThan6Months: boolean;
   nguHanhScore: number;
@@ -146,7 +147,8 @@ Yêu cầu về nội dung:
 - Họ tên: ${params.name}
 - Ngày sinh: ${params.dob}
 - Giờ sinh: ${params.tob || 'Không cung cấp'}
-- Mệnh: ${params.menh}
+- Mệnh theo ngày tháng sinh (mùa sinh): ${params.menh}
+- Mệnh theo năm sinh (tuổi Can Chi): ${params.menhNien}
 - Vấn đề cải vận: ${params.focusArea || 'Luận giải tổng quan'}
 - Thời gian sử dụng SIM: ${duration}
 
@@ -177,7 +179,7 @@ Yêu cầu về nội dung:
 Bạn phải phân tích và trả về đúng định dạng Markdown có cấu trúc chính xác sau:
 
 ### Luận Phong thủy
-[Diễn giải mối tương quan phong thủy của SIM với bản mệnh người dùng, ${focusText}. Chỉ được nói về xu hướng, thời điểm, mức độ ảnh hưởng, và điều kiện sử dụng. Không phán xét số phận hay gây hoang mang.]
+[Diễn giải mối tương quan phong thủy của SIM với bản mệnh người dùng, ${focusText}. Hãy phân tích rõ tính chất phong thủy của các con số tương hợp/tương sinh với cả Mệnh theo năm sinh (${params.menhNien}) và Mệnh theo ngày tháng sinh (${params.menh}). Chỉ rõ mức độ tương tác, ảnh hưởng của sự trùng khớp hoặc khác biệt giữa hai mệnh này đối với việc chọn SIM phong thủy. Chỉ được nói về xu hướng, thời điểm, mức độ ảnh hưởng, và điều kiện sử dụng. Không phán xét số phận hay gây hoang mang.]
 
 ### Luận Phong thủy số
 [Diễn giải năng lượng của các con số dưới góc nhìn phong thủy số học.]
@@ -222,27 +224,39 @@ export async function generateDailyHoroscope(params: DailyHoroscopeParams): Prom
     ? `kết hợp một chút phân tích từ giờ sinh của họ (${params.tob})` 
     : 'bỏ qua yếu tố giờ sinh';
 
-  const prompt = `Hãy viết một bản tin nhắc nhở vận khí hằng ngày ngắn gọn, tích cực và mang tính tham khảo chiêm nghiệm sâu sắc cho ngày ${params.dateStr} bằng tiếng Việt.
+  const prompt = `Hãy viết một bản tin nhắc nhở vận khí hằng ngày (Tử vi hằng ngày) cá nhân hóa, sâu sắc và mang tính chiêm nghiệm văn hóa cho ngày Dương lịch là ${params.dateStr} bằng tiếng Việt.
 
-Thông tin cá nhân người dùng:
+Thông tin người dùng:
 - Họ tên: ${params.name}
-- Mệnh: ${params.menh}
-- ${tobText}
-- Vấn đề quan tâm cải vận: ${params.focusArea}
-
-Thông tin Thần số học cá nhân của họ ngày hôm nay:
+- Mệnh theo ngày tháng sinh: ${params.menh}
 - Con số chủ đạo (Life Path): ${params.lifePath}
-- Năm cá nhân (Personal Year): ${params.personalYear}
-- Tháng cá nhân (Personal Month): ${params.personalMonth}
-- Ngày cá nhân hôm nay (Personal Day): ${params.personalDay} (Con số này trực tiếp quyết định năng lượng chủ đạo trong ngày hôm nay của họ)
-- Giai đoạn đỉnh cao hiện tại: Đỉnh ${params.currentPinnacle.phase} (hướng đến mốc ${params.currentPinnacle.age} tuổi, mang tần số số ${params.currentPinnacle.value})
+- Vấn đề quan tâm cải vận: ${params.focusArea}
+- ${tobText}
 
-Yêu cầu nội dung bản tin tử vi ngày hôm nay:
-- Viết 1 đoạn ngắn khoảng 80-120 từ, mang năng lượng tích cực và khuyến khích người đọc.
-- Hãy phân tích sát cách Ngày cá nhân hôm nay (Số ${params.personalDay}) kết hợp với Mệnh, ${tobInstruction} và Vấn đề cải vận tác động đến tinh thần, công việc hoặc cuộc sống của họ.
-- Gợi ý 1-2 hành động cụ thể và thực tế cho ngày hôm nay dựa trên sự kết hợp giữa Ngày cá nhân Số ${params.personalDay} và vấn đề cải vận "${params.focusArea}" của họ.
-- Ngôn ngữ thân thiện, dễ hiểu, không dùng thuật ngữ chuyên môn quá phức tạp hay mang tính chất mê tín dị đoan.
-- Trực tiếp đi vào đoạn phân tích, không thêm lời chào mở đầu hay kết thúc rườm rà.`;
+Thông tin Thần số học hôm nay:
+- Năm cá nhân: ${params.personalYear} | Tháng cá nhân: ${params.personalMonth} | Ngày cá nhân: ${params.personalDay}
+- Giai đoạn đỉnh cao hiện tại: Đỉnh ${params.currentPinnacle.phase} (mốc tuổi ${params.currentPinnacle.age}, tần số rung động ${params.currentPinnacle.value})
+
+Yêu cầu nội dung bản tin tử vi hằng ngày:
+1. Đầu tiên, hãy đóng vai trò Dịch sư và tính toán chi tiết Lịch Vạn Niên của ngày ${params.dateStr} (bao gồm: Ngày Âm lịch tương ứng, Can Chi của ngày/tháng/năm, Trực của ngày, ngày Hoàng đạo hay Hắc đạo, Hướng xuất hành tốt và các Tuổi xung khắc).
+2. Hãy kết hợp hài hòa thông tin Lịch Vạn Niên trên với Con số chủ đạo, Mệnh ngày tháng sinh, Ngày cá nhân (Số ${params.personalDay}), ${tobInstruction} và vấn đề cải vận "${params.focusArea}" của họ để luận giải vận khí.
+3. Bản tin gửi cho người dùng phải có cấu trúc Markdown rõ ràng gồm 3 phần chính (không thêm lời mở đầu hay kết thúc rườm rà):
+
+### 📅 LỊCH VẠN NIÊN & VẬN KHÍ HÔM NAY
+- Ngày Âm lịch & Bát tự Can Chi ngày.
+- Đánh giá ngày (Hoàng đạo/Hắc đạo) & Trực của ngày.
+
+### 🔮 DỰ BÁO CÁ NHÂN HẰNG NGÀY
+- Phân tích sự tương tác giữa Ngày cá nhân, Số chủ đạo và Mệnh ngày tháng với năng lượng của ngày hôm nay đối với khía cạnh cải vận "${params.focusArea}".
+
+### 💡 LỜI KHUYÊN HÀNH ĐỘNG
+- Nên làm gì và tránh làm gì hôm nay để mọi việc hanh thông cát lợi.
+- Các khung giờ Hoàng đạo tốt trong ngày để khởi sự.
+- Hướng xuất hành (Tài thần/Hỷ thần) và các tuổi xung khắc cần đề phòng.
+
+*Lưu ý:*
+- Hãy viết ngắn gọn, súc tích, dễ hiểu và mang năng lượng tích cực, truyền cảm hứng.
+- Trực tiếp đi vào các mục Markdown như trên.`;
 
   return callAi(prompt);
 }

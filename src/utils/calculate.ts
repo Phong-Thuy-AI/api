@@ -31,10 +31,10 @@ export function calculateMenh(dob: string): 'Kim' | 'Mộc' | 'Thủy' | 'Hỏa'
   const month = date.getMonth() + 1; // 1-12
   const day = date.getDate();
 
-  // Xác định khoảng giao mùa Thổ (10 ngày cuối tháng trước và 10 ngày đầu tháng sau)
+  // Xác định khoảng giao mùa Thổ (đã sửa từ 21/06-10/07 thành 21/07-10/08)
   const isTho = 
     (month === 3 && day >= 21) || (month === 4 && day <= 10) ||
-    (month === 6 && day >= 21) || (month === 7 && day <= 10) ||
+    (month === 7 && day >= 21) || (month === 8 && day <= 10) ||
     (month === 9 && day >= 21) || (month === 10 && day <= 10) ||
     (month === 12 && day >= 21) || (month === 1 && day <= 10);
 
@@ -44,10 +44,14 @@ export function calculateMenh(dob: string): 'Kim' | 'Mộc' | 'Thủy' | 'Hỏa'
   if ((month === 1 && day >= 11) || month === 2 || (month === 3 && day <= 20)) {
     return 'Mộc';
   }
-  if ((month === 4 && day >= 11) || month === 5 || (month === 6 && day <= 20)) {
+  if ((month === 4 && day >= 11) || month === 5 || month === 6) { // Toàn bộ tháng 6
     return 'Hỏa';
   }
-  if ((month === 7 && day >= 11) || month === 8 || (month === 9 && day <= 20)) {
+  if (
+    (month === 7 && day <= 20) ||
+    (month === 8 && day >= 11) ||
+    (month === 9 && day <= 20)
+  ) { // 01/07-20/07 và 11/08-20/09
     return 'Kim';
   }
   if ((month === 10 && day >= 11) || month === 11 || (month === 12 && day <= 20)) {
@@ -58,15 +62,49 @@ export function calculateMenh(dob: string): 'Kim' | 'Mộc' | 'Thủy' | 'Hỏa'
 }
 
 /**
- * Tính điểm tương hợp Ngũ hành dựa trên 6 số cuối của số điện thoại.
+ * Tính Mệnh theo năm sinh (Mệnh Niên / Can Chi)
+ */
+export function calculateMenhNien(dob: string): 'Kim' | 'Mộc' | 'Thủy' | 'Hỏa' | 'Thổ' {
+  const date = new Date(dob);
+  if (isNaN(date.getTime())) {
+    throw new Error('Ngày sinh không hợp lệ');
+  }
+  const year = date.getFullYear();
+  
+  // Giá trị Can: Giáp/Ất = 1, Bính/Đinh = 2, Mậu/Kỷ = 3, Canh/Tân = 4, Nhâm/Quý = 5
+  const canValues = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]; // index 0-9 tương ứng Giáp-Quý
+  const canIndex = (year - 4) % 10;
+  const canVal = canValues[canIndex >= 0 ? canIndex : canIndex + 10];
+
+  // Giá trị Chi: Tý/Sửu/Ngọ/Mùi = 0, Dần/Mão/Thân/Dậu = 1, Thìn/Tỵ/Tuất/Hợi = 2
+  const chiValues = [0, 0, 1, 1, 2, 2, 0, 0, 1, 1, 2, 2]; // index 0-11 tương ứng Tý-Hợi
+  const chiIndex = (year - 4) % 12;
+  const chiVal = chiValues[chiIndex >= 0 ? chiIndex : chiIndex + 12];
+
+  let menhVal = canVal + chiVal;
+  if (menhVal > 5) menhVal -= 5;
+
+  const menhMap: Record<number, 'Kim' | 'Thủy' | 'Hỏa' | 'Thổ' | 'Mộc'> = {
+    1: 'Kim',
+    2: 'Thủy',
+    3: 'Hỏa',
+    4: 'Thổ',
+    5: 'Mộc'
+  };
+
+  return menhMap[menhVal];
+}
+
+/**
+ * Tính điểm tương hợp Ngũ hành dựa trên toàn bộ số điện thoại.
  * Thang điểm tối đa 50.
  */
 export function calculateNguHanhSim(phone: string, menh: 'Kim' | 'Mộc' | 'Thủy' | 'Hỏa' | 'Thổ'): NguHanhResult {
   const cleanPhone = phone.replace(/\D/g, '');
   if (cleanPhone.length < 6) {
-    throw new Error('Số điện thoại đầu vào phải có tối thiểu 6 chữ số đuôi để chấm điểm');
+    throw new Error('Số điện thoại đầu vào phải có tối thiểu 6 chữ số để chấm điểm');
   }
-  const phoneLast6 = cleanPhone.slice(-6);
+  const analyzeDigits = cleanPhone;
 
   // Quy đổi ngũ hành của số
   // Kim: 4, 6
@@ -87,7 +125,7 @@ export function calculateNguHanhSim(phone: string, menh: 'Kim' | 'Mộc' | 'Th�
   let c_hop = 0;
   let c_khac = 0;
 
-  for (const digit of phoneLast6) {
+  for (const digit of analyzeDigits) {
     const digitHanh = getDigitHanh(digit);
     if (!digitHanh) continue;
 
@@ -123,7 +161,7 @@ export function calculateNguHanhSim(phone: string, menh: 'Kim' | 'Mộc' | 'Th�
   if (c_sinh + c_hop > c_khac && c_sinh > c_khac && c_khac === 0) {
     score = 50;
     rating = 'Đạt';
-    details = `SIM của bạn có sự phối hợp Ngũ hành rất tốt với mệnh ${menh}: có ${c_sinh} số tương sinh, ${c_hop} số tương hợp và hoàn toàn không bị khắc chế (0 số khắc).`;
+    details = `SIM có sự phối hợp Ngũ hành rất tốt với mệnh ${menh}: có ${c_sinh} số tương sinh, ${c_hop} số tương hợp và hoàn toàn không bị khắc chế (0 số khắc).`;
   } else if (c_sinh + c_hop > c_khac && c_sinh > c_khac && c_khac > 0) {
     score = 40;
     rating = 'Đạt (Trội)';

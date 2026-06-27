@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { User, Hexagram } from '@/models';
-import { calculateMenh, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
+import { calculateMenh, calculateMenhNien, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
 import { signToken } from '@/utils/jwt';
 import { sendSuccess } from '@/utils/response';
 import { generateSimAnalysis } from '@/services/ai.service';
@@ -136,9 +136,41 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     }
   }
 
+  // 1.5. Kiểm tra giới hạn lượt check (tối đa 5 lần/người)
+  const existingUserForPhone = await User.findOne({ where: { phone: cleanPhone } });
+  if (!existingUserForPhone) {
+    const checkCount = await User.count({
+      where: {
+        name,
+        dob: dob
+      }
+    });
+    if (checkCount >= 5) {
+      throw {
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'Bạn đã vượt quá giới hạn kiểm tra SIM phong thủy (tối đa 5 lần cho cùng một thông tin cá nhân).'
+      };
+    }
+  }
+
   // 2. Tính toán phong thủy
-  const menh = calculateMenh(dob);
-  const nguHanhResult = calculateNguHanhSim(cleanPhone, menh);
+  const menh = calculateMenh(dob); // Mệnh theo ngày tháng (mùa sinh)
+  const menhNien = calculateMenhNien(dob); // Mệnh theo năm (tuổi)
+
+  const nguHanhResultNgayThang = calculateNguHanhSim(cleanPhone, menh);
+  const nguHanhResultNien = calculateNguHanhSim(cleanPhone, menhNien);
+
+  const combinedDetails = `Mệnh theo năm sinh (${menhNien}): ${nguHanhResultNien.details}\nMệnh theo ngày tháng sinh (${menh}): ${nguHanhResultNgayThang.details}`;
+
+  const nguHanhResult = {
+    score: nguHanhResultNgayThang.score,
+    c_sinh: nguHanhResultNgayThang.c_sinh,
+    c_hop: nguHanhResultNgayThang.c_hop,
+    c_khac: nguHanhResultNgayThang.c_khac,
+    rating: nguHanhResultNgayThang.rating,
+    details: combinedDetails
+  };
 
   const phoneLast6 = cleanPhone.slice(-6);
   const tienVanStr = phoneLast6.substring(0, 4);
@@ -252,6 +284,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     dob,
     tob,
     menh,
+    menhNien,
     focusArea,
     usedLessThan6Months,
     nguHanhScore: nguHanhResult.score,
@@ -294,6 +327,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     },
     result: {
       menh,
+      menhNien,
       nguHanh: {
         score: nguHanhResult.score,
         c_sinh: nguHanhResult.c_sinh,
