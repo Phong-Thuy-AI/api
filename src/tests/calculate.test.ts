@@ -1,21 +1,21 @@
 import { describe, test, expect } from '@jest/globals';
-import { calculateMenh, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
+import { calculateMenh, calculateMenhNien, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
 
 describe('Thuật toán tính Mệnh - calculateMenh()', () => {
   test('Xác định mệnh Thổ (Ngày giao mùa)', () => {
-    // 21/03 - 10/04 (giao mùa Xuân - Hạ)
+    // 21/03 - 10/04
     expect(calculateMenh('1995-03-21')).toBe('Thổ');
     expect(calculateMenh('1995-04-10')).toBe('Thổ');
     
-    // 21/06 - 10/07 (giao mùa Hạ - Thu)
-    expect(calculateMenh('1990-06-25')).toBe('Thổ');
-    expect(calculateMenh('1990-07-10')).toBe('Thổ');
+    // 21/07 - 10/08 (đã sửa)
+    expect(calculateMenh('1990-07-25')).toBe('Thổ');
+    expect(calculateMenh('1990-08-10')).toBe('Thổ');
 
-    // 21/09 - 10/10 (giao mùa Thu - Đông)
+    // 21/09 - 10/10
     expect(calculateMenh('2000-09-30')).toBe('Thổ');
     expect(calculateMenh('2000-10-05')).toBe('Thổ');
 
-    // 21/12 - 10/01 (giao mùa Đông - Xuân)
+    // 21/12 - 10/01
     expect(calculateMenh('1988-12-21')).toBe('Thổ');
     expect(calculateMenh('1989-01-05')).toBe('Thổ');
   });
@@ -26,13 +26,14 @@ describe('Thuật toán tính Mệnh - calculateMenh()', () => {
     expect(calculateMenh('1995-02-15')).toBe('Mộc');
     expect(calculateMenh('1995-03-20')).toBe('Mộc');
 
-    // Hỏa: 11/04 - 20/06
+    // Hỏa: 11/04 - 30/06 (đã sửa)
     expect(calculateMenh('1995-04-11')).toBe('Hỏa');
     expect(calculateMenh('1995-05-20')).toBe('Hỏa');
-    expect(calculateMenh('1995-06-20')).toBe('Hỏa');
+    expect(calculateMenh('1995-06-30')).toBe('Hỏa');
 
-    // Kim: 11/07 - 20/09
-    expect(calculateMenh('1995-07-11')).toBe('Kim');
+    // Kim: 01/07 - 20/07 và 11/08 - 20/09 (đã sửa)
+    expect(calculateMenh('1995-07-05')).toBe('Kim');
+    expect(calculateMenh('1995-07-20')).toBe('Kim');
     expect(calculateMenh('1995-08-15')).toBe('Kim');
     expect(calculateMenh('1995-09-20')).toBe('Kim');
 
@@ -47,56 +48,66 @@ describe('Thuật toán tính Mệnh - calculateMenh()', () => {
   });
 });
 
+describe('Thuật toán tính Mệnh Niên (Năm sinh Can Chi) - calculateMenhNien()', () => {
+  test('Tính chính xác mệnh của năm sinh', () => {
+    expect(calculateMenhNien('1990-10-08')).toBe('Thổ'); // Canh Ngọ
+    expect(calculateMenhNien('1995-02-15')).toBe('Hỏa'); // Ất Hợi
+    expect(calculateMenhNien('1988-05-20')).toBe('Mộc'); // Mậu Thìn
+    expect(calculateMenhNien('1992-12-25')).toBe('Kim'); // Nhâm Thân
+    expect(calculateMenhNien('1983-04-12')).toBe('Thủy'); // Quý Hợi
+  });
+});
+
 describe('Thuật toán Ngũ hành SIM - calculateNguHanhSim()', () => {
   // Mệnh Kim tương sinh: Thổ (2, 5, 8); tương hợp: Kim (4, 6); tương khắc: Hỏa (9); trung tính: Thủy (0, 1), Mộc (3, 7)
 
-  test('Đạt 50 điểm (Có số sinh + hợp, không có số khắc)', () => {
-    // Số đuôi: 562482 -> Chứa Thổ (5, 2, 8, 2) và Kim (6, 4) -> 4 sinh, 2 hợp, 0 khắc
-    const result = calculateNguHanhSim('0987562482', 'Kim');
+  test('Kiểm tra SĐT của khách hàng 0888898161 (mệnh Thổ)', () => {
+    // 0888898161: 5 số Thổ (8,8,8,8,8 - hợp), 1 Hỏa (9 - sinh), 3 Thủy (0,1,1), 1 Kim (6) -> 1 sinh, 5 hợp, 0 khắc
+    const result = calculateNguHanhSim('0888898161', 'Thổ');
     expect(result.score).toBe(50);
     expect(result.rating).toBe('Đạt');
-    expect(result.c_sinh).toBe(4);
+    expect(result.c_sinh).toBe(1);
+    expect(result.c_hop).toBe(5);
+    expect(result.c_khac).toBe(0);
+  });
+
+  test('Đạt 50 điểm (Có số sinh + hợp, không có số khắc) trên toàn bộ SĐT', () => {
+    // SĐT: 0875624823 -> 5 Thổ (8, 5, 2, 8, 2 - sinh), 2 Kim (6, 4 - hợp), 0 khắc -> 5 sinh, 2 hợp, 0 khắc
+    const result = calculateNguHanhSim('0875624823', 'Kim');
+    expect(result.score).toBe(50);
+    expect(result.rating).toBe('Đạt');
+    expect(result.c_sinh).toBe(5);
     expect(result.c_hop).toBe(2);
     expect(result.c_khac).toBe(0);
   });
 
-  test('Đạt 40 điểm (Có số sinh + hợp nổi trội nhưng có số khắc)', () => {
-    // Số đuôi: 569482 -> Chứa Thổ (5, 8, 2 - 3 sinh), Kim (6, 4 - 2 hợp), Hỏa (9 - 1 khắc)
-    // Sinh + Hợp = 5 > 1 khắc; Sinh = 3 > 1 khắc; Khắc = 1 > 0 -> 40đ
-    const result = calculateNguHanhSim('569482', 'Kim');
+  test('Đạt 40 điểm (Có số sinh + hợp nổi trội nhưng có số khắc) trên toàn bộ SĐT', () => {
+    // SĐT: 0987562482 -> 5 Thổ (sinh), 2 Kim (hợp), 1 Hỏa (9 - khắc) -> 5 sinh, 2 hợp, 1 khắc
+    const result = calculateNguHanhSim('0987562482', 'Kim');
     expect(result.score).toBe(40);
     expect(result.rating).toBe('Đạt (Trội)');
-    expect(result.c_sinh).toBe(3);
+    expect(result.c_sinh).toBe(5);
     expect(result.c_hop).toBe(2);
     expect(result.c_khac).toBe(1);
   });
 
-  test('Biến động lớn (20 điểm) (Sinh = Khắc > 0)', () => {
-    // Số đuôi: 593710 -> Chứa Thổ (5 - 1 sinh), Hỏa (9 - 1 khắc), Mộc (3, 7 - trung tính), Thủy (1, 0 - trung tính)
-    // Sinh = 1, Khắc = 1 -> Sinh == Khắc -> 20đ
-    const result = calculateNguHanhSim('593710', 'Kim');
+  test('Biến động lớn (20 điểm) (Sinh = Khắc > 0) trên toàn bộ SĐT', () => {
+    // SĐT: 0137462959 -> 2 Thổ (2, 5 - sinh), 2 Hỏa (9, 9 - khắc), 2 Kim (4, 6 - hợp) -> c_sinh = 2, c_khac = 2
+    const result = calculateNguHanhSim('0137462959', 'Kim');
     expect(result.score).toBe(20);
     expect(result.rating).toBe('Biến động lớn');
-    expect(result.c_sinh).toBe(1);
-    expect(result.c_khac).toBe(1);
+    expect(result.c_sinh).toBe(2);
+    expect(result.c_khac).toBe(2);
   });
 
-  test('Không đạt (0 điểm) (Khắc chiếm ưu thế)', () => {
-    // Số đuôi: 999371 -> Chứa Hỏa (9, 9, 9 - 3 khắc), Mộc (3, 7 - trung tính), Thủy (1 - trung tính)
-    // Sinh = 0, Hợp = 0, Khắc = 3 -> Khắc vượt trội -> 0đ
-    const result = calculateNguHanhSim('999371', 'Kim');
+  test('Không đạt (0 điểm) (Khắc chiếm ưu thế) trên toàn bộ SĐT', () => {
+    // SĐT: 0999999137 -> 6 Hỏa (9,9,9,9,9,9 - khắc), 0 sinh, 0 hợp -> c_khac = 6
+    const result = calculateNguHanhSim('0999999137', 'Kim');
     expect(result.score).toBe(0);
     expect(result.rating).toBe('Không đạt');
     expect(result.c_sinh).toBe(0);
     expect(result.c_hop).toBe(0);
-    expect(result.c_khac).toBe(3);
-  });
-
-  test('Chỉ dùng 6 số cuối khi nhập số điện thoại đầy đủ', () => {
-    const fullPhoneResult = calculateNguHanhSim('0900562482', 'Kim');
-    const lastSixResult = calculateNguHanhSim('562482', 'Kim');
-
-    expect(fullPhoneResult).toEqual(lastSixResult);
+    expect(result.c_khac).toBe(6);
   });
 
   test('Trả lỗi khi đầu vào có ít hơn 6 chữ số', () => {
