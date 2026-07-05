@@ -15,6 +15,8 @@ export interface UserAttributes {
   referredByCode?: string | null
   horoscopeExpiresAt?: Date | null
   referralBonusMonths?: number
+  trialUsed?: boolean
+  expiryEmailSent?: boolean
 }
 
 export class User extends Model<UserAttributes> implements UserAttributes {
@@ -31,6 +33,8 @@ export class User extends Model<UserAttributes> implements UserAttributes {
   declare referredByCode: string | null
   declare horoscopeExpiresAt: Date | null
   declare referralBonusMonths: number
+  declare trialUsed: boolean
+  declare expiryEmailSent: boolean
 
   declare readonly createdAt: Date
   declare readonly updatedAt: Date
@@ -50,7 +54,9 @@ User.init(
     referralCode: { type: DataTypes.STRING(50), unique: true, allowNull: true, field: 'referral_code' },
     referredByCode: { type: DataTypes.STRING(50), allowNull: true, field: 'referred_by_code' },
     horoscopeExpiresAt: { type: DataTypes.DATE, allowNull: true, field: 'horoscope_expires_at' },
-    referralBonusMonths: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'referral_bonus_months' }
+    referralBonusMonths: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'referral_bonus_months' },
+    trialUsed: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'trial_used' },
+    expiryEmailSent: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'expiry_email_sent' }
   },
   { sequelize, tableName: 'users', underscored: true }
 )

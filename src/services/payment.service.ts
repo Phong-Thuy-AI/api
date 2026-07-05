@@ -152,24 +152,39 @@ export async function checkAndUpdateOrderStatus(orderId: number): Promise<{ paid
       order.paidAt = new Date();
       await order.save({ transaction: t });
 
-      // Tạo ChatRoom cho cả 200k VÀ 500k
       const orderWithUser = await Order.findByPk(order.id, {
         include: [{ model: User, as: 'user' }],
         transaction: t
       });
       const user = (orderWithUser as any)?.user as User | null;
-      const sourceType = user?.referredByCode ? 'referral' : 'direct';
 
-      const [chatRoom] = await ChatRoom.findOrCreate({
-        where: { orderId: order.id },
-        defaults: { orderId: order.id, status: 'active', sourceType },
-        transaction: t
-      });
+      if (order.packageType === '365k') {
+        if (user) {
+          const creditDays = 365;
+          const now = new Date();
+          const currentExpiry = user.horoscopeExpiresAt;
+          user.horoscopeExpiresAt = currentExpiry && currentExpiry > now
+            ? new Date(currentExpiry.getTime() + creditDays * 24 * 60 * 60 * 1000)
+            : new Date(now.getTime() + creditDays * 24 * 60 * 60 * 1000);
+          user.expiryEmailSent = false;
+          await user.save({ transaction: t });
+        }
+        order.status = 'completed';
+        order.completedAt = new Date();
+        await order.save({ transaction: t });
+      } else {
+        const sourceType = user?.referredByCode ? 'referral' : 'direct';
+        const [chatRoom] = await ChatRoom.findOrCreate({
+          where: { orderId: order.id },
+          defaults: { orderId: order.id, status: 'active', sourceType },
+          transaction: t
+        });
 
-      t.afterCommit(async () => {
-        await sendChatRoomSystemMessage(chatRoom.id, order);
-        notifyAdminNewChatRoom(chatRoom);
-      });
+        t.afterCommit(async () => {
+          await sendChatRoomSystemMessage(chatRoom.id, order);
+          notifyAdminNewChatRoom(chatRoom);
+        });
+      }
 
       await t.commit();
       return { paid: true, order };
@@ -219,18 +234,34 @@ export async function forcePayOrder(orderId: number): Promise<Order> {
       transaction: t
     });
     const user = (orderWithUser as any)?.user as User | null;
-    const sourceType = user?.referredByCode ? 'referral' : 'direct';
 
-    const [chatRoom] = await ChatRoom.findOrCreate({
-      where: { orderId: order.id },
-      defaults: { orderId: order.id, status: 'active', sourceType },
-      transaction: t
-    });
+    if (order.packageType === '365k') {
+      if (user) {
+        const creditDays = 365;
+        const now = new Date();
+        const currentExpiry = user.horoscopeExpiresAt;
+        user.horoscopeExpiresAt = currentExpiry && currentExpiry > now
+          ? new Date(currentExpiry.getTime() + creditDays * 24 * 60 * 60 * 1000)
+          : new Date(now.getTime() + creditDays * 24 * 60 * 60 * 1000);
+        user.expiryEmailSent = false;
+        await user.save({ transaction: t });
+      }
+      order.status = 'completed';
+      order.completedAt = new Date();
+      await order.save({ transaction: t });
+    } else {
+      const sourceType = user?.referredByCode ? 'referral' : 'direct';
+      const [chatRoom] = await ChatRoom.findOrCreate({
+        where: { orderId: order.id },
+        defaults: { orderId: order.id, status: 'active', sourceType },
+        transaction: t
+      });
 
-    t.afterCommit(async () => {
-      await sendChatRoomSystemMessage(chatRoom.id, order);
-      notifyAdminNewChatRoom(chatRoom);
-    });
+      t.afterCommit(async () => {
+        await sendChatRoomSystemMessage(chatRoom.id, order);
+        notifyAdminNewChatRoom(chatRoom);
+      });
+    }
 
     await t.commit();
     return order;
@@ -283,19 +314,38 @@ export async function checkAllPendingOrders(): Promise<void> {
           transaction: t
         });
         const user = (orderWithUser as any)?.user as User | null;
-        const sourceType = user?.referredByCode ? 'referral' : 'direct';
 
-        const [chatRoom] = await ChatRoom.findOrCreate({
-          where: { orderId: order.id },
-          defaults: { orderId: order.id, status: 'active', sourceType },
-          transaction: t
-        });
+        if (order.packageType === '365k') {
+          if (user) {
+            const creditDays = 365;
+            const now = new Date();
+            const currentExpiry = user.horoscopeExpiresAt;
+            user.horoscopeExpiresAt = currentExpiry && currentExpiry > now
+              ? new Date(currentExpiry.getTime() + creditDays * 24 * 60 * 60 * 1000)
+              : new Date(now.getTime() + creditDays * 24 * 60 * 60 * 1000);
+            user.expiryEmailSent = false;
+            await user.save({ transaction: t });
+          }
+          order.status = 'completed';
+          order.completedAt = new Date();
+          await order.save({ transaction: t });
+          t.afterCommit(async () => {
+            console.log(`[Payment Sweeper] Đơn hàng gia hạn #${order.id} đã hoàn thành tự động qua background sweeper.`);
+          });
+        } else {
+          const sourceType = user?.referredByCode ? 'referral' : 'direct';
+          const [chatRoom] = await ChatRoom.findOrCreate({
+            where: { orderId: order.id },
+            defaults: { orderId: order.id, status: 'active', sourceType },
+            transaction: t
+          });
 
-        t.afterCommit(async () => {
-          await sendChatRoomSystemMessage(chatRoom.id, order);
-          notifyAdminNewChatRoom(chatRoom);
-          console.log(`[Payment Sweeper] Đơn hàng #${order.id} đối soát thành công qua background sweeper.`);
-        });
+          t.afterCommit(async () => {
+            await sendChatRoomSystemMessage(chatRoom.id, order);
+            notifyAdminNewChatRoom(chatRoom);
+            console.log(`[Payment Sweeper] Đơn hàng #${order.id} đối soát thành công qua background sweeper.`);
+          });
+        }
 
         await t.commit();
       } catch (err) {

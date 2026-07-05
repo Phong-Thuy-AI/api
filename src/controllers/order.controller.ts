@@ -18,8 +18,8 @@ export async function createOrder(req: Request, res: Response) {
 
   let targetUserId = req.user?.userId;
 
-  if (!packageType || !['200k', '500k'].includes(packageType)) {
-    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Loại gói dịch vụ không hợp lệ (chỉ chấp nhận gói 200k hoặc 500k).' };
+  if (!packageType || !['200k', '500k', '365k'].includes(packageType)) {
+    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Loại gói dịch vụ không hợp lệ (chỉ chấp nhận gói 200k, 500k hoặc 365k).' };
   }
 
   // Validate metadata bắt buộc theo gói
@@ -110,7 +110,9 @@ export async function createOrder(req: Request, res: Response) {
     }
   }
 
-  const amount = packageType === '200k' ? 200000 : 500000;
+  let amount = 200000;
+  if (packageType === '500k') amount = 500000;
+  else if (packageType === '365k') amount = 365000;
   const paymentCode = await generatePaymentCode();
 
   const order = await Order.create({
@@ -215,8 +217,13 @@ export async function completeOrder(req: Request, res: Response) {
     throw { statusCode: 400, code: 'VALIDATION_ERROR', message: `Chỉ có thể hoàn thành đơn hàng ở trạng thái "${ORDER_PAID}".` };
   }
 
-  // Số ngày subscription theo gói: 200k=30d, 500k=90d
-  const creditDays = order.packageType === PACKAGE_TYPE_500K ? CREDIT_DAYS_500K : CREDIT_DAYS_200K;
+  // Số ngày subscription theo gói: 200k=30d, 500k=90d, 365k=365d
+  let creditDays = CREDIT_DAYS_200K;
+  if (order.packageType === PACKAGE_TYPE_500K) {
+    creditDays = CREDIT_DAYS_500K;
+  } else if (order.packageType === '365k') {
+    creditDays = 365;
+  }
   const now = new Date();
 
   const orderUser = (order as any).user as User | null;
@@ -225,6 +232,7 @@ export async function completeOrder(req: Request, res: Response) {
     orderUser.horoscopeExpiresAt = currentExpiry && currentExpiry > now
       ? new Date(currentExpiry.getTime() + creditDays * 24 * 60 * 60 * 1000)
       : new Date(now.getTime() + creditDays * 24 * 60 * 60 * 1000);
+    orderUser.expiryEmailSent = false;
     await orderUser.save();
 
     if (orderUser.referredByCode) {

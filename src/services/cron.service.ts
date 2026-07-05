@@ -2,10 +2,11 @@ import cron from 'node-cron';
 import { Op } from 'sequelize';
 import { DailyHoroscope, User, DailyEmailLog } from '@/models';
 import { generateDailyHoroscope } from '@/services/ai.service';
-import { sendDailyHoroscope } from '@/services/email.service';
+import { sendDailyHoroscope, sendSubscriptionExpiryEmail } from '@/services/email.service';
 import { checkAllPendingOrders } from '@/services/payment.service';
 import { MENH_LIST, FOCUS_AREAS } from '@/utils/constants';
 import { calculateLifePath, calculatePersonalVibrations, getCurrentPinnacle } from '@/utils/numerology';
+import { signToken } from '@/utils/jwt';
 
 /**
  * Tạo tử vi hằng ngày cá nhân hóa cho từng User có gói đăng ký còn hiệu lực.
@@ -165,6 +166,43 @@ export async function sendAllDailyEmails(): Promise<void> {
 }
 
 /**
+ * Quét các user hết hạn gói tử vi hằng ngày và gửi email thông báo kèm link gia hạn
+ */
+export async function sendExpirationAlerts(): Promise<void> {
+  const expiredUsers = await User.findAll({
+    where: {
+      horoscopeExpiresAt: { [Op.lte]: new Date() },
+      expiryEmailSent: false,
+      email: { [Op.and]: [{ [Op.not]: null }, { [Op.ne]: '' }] }
+    }
+  });
+
+  if (expiredUsers.length === 0) {
+    console.log('[Cron] No expired users to alert today.');
+    return;
+  }
+
+  console.log(`[Cron] Found ${expiredUsers.length} expired users. Sending renewal emails...`);
+  // Lấy domain API chạy thực tế (ví dụ qua proxy hoặc trực tiếp)
+  const apiUrl = process.env.API_URL || 'http://localhost:3000';
+
+  for (const user of expiredUsers) {
+    try {
+      // Sinh token tự đăng nhập ngắn hạn (ví dụ: 7 ngày)
+      const token = signToken({ userId: user.id, role: 'user' }, '7d');
+      const renewLink = `${apiUrl}/api/v1/auth/user/renew-login?token=${token}`;
+
+      await sendSubscriptionExpiryEmail(user.email!, user.name, renewLink);
+      user.expiryEmailSent = true;
+      await user.save();
+      console.log(`[Cron] Alerted expiration to user: ${user.email}`);
+    } catch (err: any) {
+      console.error(`[Cron] Failed to alert user ${user.email}:`, err.message || err);
+    }
+  }
+}
+
+/**
  * Khởi tạo tất cả cron jobs.
  * Gọi 1 lần khi server start.
  */
@@ -174,6 +212,7 @@ export function initCronJobs(): void {
     console.log('[Cron] Daily horoscope job triggered at 00:00 ICT.');
     await generateAllDailyHoroscopes();
     await sendAllDailyEmails();
+    await sendExpirationAlerts();
   }, {
     timezone: 'Asia/Ho_Chi_Minh'
   });

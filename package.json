@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/server.ts",
     "build": "tsc && tsc-alias",
-    "start": "node dist/utils/migrateEmailOptional.js && node dist/utils/migrateFocusArea.js && node dist/server.js",
+    "start": "node dist/utils/migrateEmailOptional.js && node dist/utils/migrateFocusArea.js && node dist/utils/migrateTrialFields.js && node dist/server.js",
     "db:import": "ts-node-dev -r tsconfig-paths/register src/utils/importHexagrams.ts",
     "migrate:email-optional": "ts-node -r tsconfig-paths/register src/utils/migrateEmailOptional.ts",
     "migrate:focus-area": "ts-node -r tsconfig-paths/register src/utils/migrateFocusArea.ts",
     "migrate:focus-area:prod": "node dist/utils/migrateFocusArea.js",
+    "migrate:trial-fields": "ts-node -r tsconfig-paths/register src/utils/migrateTrialFields.ts",
     "test": "jest"
   },
   "keywords": [],

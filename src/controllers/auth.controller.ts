@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Op } from 'sequelize';
 import { User, Order, ChatRoom } from '@/models';
-import { signToken } from '@/utils/jwt';
+import { signToken, verifyToken } from '@/utils/jwt';
 import { sendSuccess } from '@/utils/response';
 import { PACKAGE_TYPE_200K, ORDER_PAID, ORDER_COMPLETED } from '@/utils/constants';
 
@@ -145,4 +145,134 @@ export async function lookupUser(req: Request, res: Response) {
     },
     orders: ordersWithRoom
   }, 'Tra cứu thông tin khách hàng thành công.');
+}
+
+/**
+ * Lấy thông tin profile người dùng hiện tại qua token cookie
+ * GET /api/v1/auth/user/me
+ */
+export async function getUserProfile(req: Request, res: Response) {
+  const userId = req.user?.userId;
+  if (!userId) {
+    throw { statusCode: 401, code: 'UNAUTHORIZED', message: 'Bạn chưa đăng nhập.' };
+  }
+
+  const user = await User.findByPk(userId);
+  if (!user) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: 'Không tìm thấy thông tin người dùng.' };
+  }
+
+  return sendSuccess(res, {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      menh: user.menh,
+      focusArea: user.focusArea,
+      horoscopeExpiresAt: user.horoscopeExpiresAt,
+      trialUsed: user.trialUsed
+    }
+  }, 'Lấy thông tin profile thành công.');
+}
+
+/**
+ * Đăng ký dùng thử tử vi 1 tháng miễn phí
+ * POST /api/v1/auth/user/subscribe-trial
+ */
+export async function subscribeTrial(req: Request, res: Response) {
+  const userId = req.user?.userId;
+  if (!userId) {
+    throw { statusCode: 401, code: 'UNAUTHORIZED', message: 'Bạn chưa đăng nhập.' };
+  }
+
+  const user = await User.findByPk(userId);
+  if (!user) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: 'Không tìm thấy thông tin người dùng.' };
+  }
+
+  if (user.trialUsed) {
+    throw { statusCode: 400, code: 'TRIAL_ALREADY_USED', message: 'Mỗi khách hàng chỉ được đăng ký dùng thử miễn phí 1 lần.' };
+  }
+
+  const { email } = req.body;
+  if (!user.email) {
+    if (!email) {
+      throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Vui lòng cung cấp địa chỉ email để nhận tử vi hằng ngày.' };
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Địa chỉ email không đúng định dạng.' };
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    
+    // Kiểm tra xem email đã được đăng ký bởi tài khoản khác chưa
+    const existingUser = await User.findOne({
+      where: {
+        email: cleanEmail,
+        id: { [Op.ne]: userId }
+      }
+    });
+    if (existingUser) {
+      throw { statusCode: 400, code: 'EMAIL_ALREADY_EXISTS', message: 'Địa chỉ email này đã được đăng ký bởi khách hàng khác.' };
+    }
+    
+    user.email = cleanEmail;
+  }
+
+  // Nếu người dùng đăng ký tử vi mà chưa chọn vấn đề cải vận thì gán mặc định
+  if (!user.focusArea) {
+    user.focusArea = 'Công việc'; // Giá trị mặc định
+  }
+
+  const now = new Date();
+  user.horoscopeExpiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 ngày dùng thử
+  user.trialUsed = true;
+  user.expiryEmailSent = false; // reset flag khi đăng ký mới
+  await user.save();
+
+  return sendSuccess(res, {
+    id: user.id,
+    email: user.email,
+    horoscopeExpiresAt: user.horoscopeExpiresAt,
+    trialUsed: user.trialUsed
+  }, 'Đăng ký dùng thử 1 tháng tử vi hằng ngày miễn phí thành công!');
+}
+
+/**
+ * Tự động đăng nhập qua link gửi trong email và chuyển hướng sang trang gia hạn
+ * GET /api/v1/auth/user/renew-login
+ */
+export async function renewLogin(req: Request, res: Response) {
+  const { token } = req.query;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).send('Mã xác thực không hợp lệ hoặc thiếu.');
+  }
+
+  try {
+    const decoded = verifyToken(token);
+    if (!decoded.userId) {
+      return res.status(400).send('Mã xác thực không hợp lệ.');
+    }
+
+    const user = await User.findByPk(decoded.userId);
+    if (!user) {
+      return res.status(404).send('Người dùng không tồn tại.');
+    }
+
+    // Thiết lập cookie đăng nhập của người dùng
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('user_token', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 ngày
+    });
+
+    return res.redirect(`${clientUrl}/renew`);
+  } catch (err) {
+    console.error('[Auth] renewLogin error:', err);
+    return res.status(401).send('Mã xác thực đã hết hạn hoặc không hợp lệ.');
+  }
 }
