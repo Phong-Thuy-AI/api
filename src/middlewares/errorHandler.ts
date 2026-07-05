@@ -22,7 +22,16 @@ export const errorHandler = (
   let details = err.details || [];
 
   // Phân loại một số lỗi phổ biến của Sequelize ORM
-  if (err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') {
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    statusCode = 400;
+    code = 'UNIQUE_CONSTRAINT_ERROR';
+    message = 'Thông tin đăng ký bị trùng lặp (Email hoặc Số điện thoại đã tồn tại trong hệ thống).';
+    // @ts-ignore
+    details = err.errors?.map((e: any) => ({
+      field: e.path,
+      message: e.message
+    })) || [];
+  } else if (err.name === 'SequelizeValidationError') {
     statusCode = 400;
     code = 'VALIDATION_ERROR';
     message = 'Dữ liệu đầu vào không hợp lệ.';

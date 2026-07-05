@@ -4,7 +4,7 @@ import axios from 'axios';
 import nodemailer from 'nodemailer';
 import { SystemConfig, Order, User, DailyEmailLog, ChatRoom, ChatMessage } from '@/models';
 import { sendSuccess } from '@/utils/response';
-import { generateAllDailyHoroscopes, sendAllDailyEmails } from '@/services/cron.service';
+import { generateAllDailyHoroscopes, sendAllDailyEmails, sendExpirationAlerts } from '@/services/cron.service';
 import { forcePayOrder } from '@/services/payment.service';
 import { getIO } from '@/services/socket.service';
 
@@ -64,6 +64,7 @@ export async function triggerDailyHoroscopes(req: Request, res: Response) {
   // Chạy ngầm, không chờ để tránh timeout HTTP
   generateAllDailyHoroscopes()
     .then(() => sendAllDailyEmails())
+    .then(() => sendExpirationAlerts())
     .catch(err => console.error('[Admin] triggerDailyHoroscopes error:', err));
 
   return sendSuccess(res, null, 'Đã kích hoạt job tạo tử vi hằng ngày. Quá trình đang chạy ngầm.');
@@ -345,8 +346,8 @@ export async function getAiModels(req: Request, res: Response) {
         return sendSuccess(res, defaultClaudeModels, 'Lấy danh sách model Claude (mặc định) thành công.');
       }
     } else {
-      const url = baseUrl 
-        ? `${baseUrl}/v1beta/models?key=${apiKey}` 
+      const url = baseUrl
+        ? `${baseUrl}/v1beta/models?key=${apiKey}`
         : `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
       const response = await axios.get(url, {
         timeout: 30000
@@ -422,8 +423,8 @@ export async function testAiConnection(req: Request, res: Response) {
       const answer = response.data.content?.[0]?.text?.trim() || '';
       return sendSuccess(res, { answer }, 'Kết nối đến Claude thành công.');
     } else {
-      const url = baseUrl 
-        ? `${baseUrl}/v1beta/models/${targetModel}:generateContent?key=${key}` 
+      const url = baseUrl
+        ? `${baseUrl}/v1beta/models/${targetModel}:generateContent?key=${key}`
         : `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${key}`;
       const response = await axios.post(
         url,
@@ -650,7 +651,7 @@ export async function confirmSimOrder(req: Request, res: Response) {
   user.horoscopeExpiresAt = currentExpiry && currentExpiry > now
     ? new Date(currentExpiry.getTime() + 30 * 24 * 60 * 60 * 1000)
     : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  
+
   await user.save();
 
   // 3. Tìm phòng chat đang active để bắn tin nhắn hệ thống
@@ -660,7 +661,7 @@ export async function confirmSimOrder(req: Request, res: Response) {
 
   if (chatRoom) {
     const systemMessage = `🎁 MÃ GIỚI THIỆU CỦA BẠN: ${referralCode}`;
-    
+
     // Lưu tin nhắn vào DB
     const chatMsg = await ChatMessage.create({
       roomId: chatRoom.id,
