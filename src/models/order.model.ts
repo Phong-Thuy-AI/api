@@ -4,7 +4,7 @@ import sequelize from '@/config/database'
 export interface OrderAttributes {
   id?: number
   userId: number
-  packageType: '200k' | '500k'
+  packageType: '200k' | '500k' | '365k'
   amount: number
   paymentCode: string
   status?: 'pending' | 'paid' | 'expired' | 'completed'
@@ -17,7 +17,7 @@ export interface OrderAttributes {
 export class Order extends Model<OrderAttributes> implements OrderAttributes {
   declare id: number
   declare userId: number
-  declare packageType: '200k' | '500k'
+  declare packageType: '200k' | '500k' | '365k'
   declare amount: number
   declare paymentCode: string
   declare status: 'pending' | 'paid' | 'expired' | 'completed'
@@ -34,7 +34,7 @@ Order.init(
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     userId: { type: DataTypes.INTEGER, allowNull: false, field: 'user_id' },
-    packageType: { type: DataTypes.ENUM('200k', '500k'), allowNull: false, field: 'package_type' },
+    packageType: { type: DataTypes.ENUM('200k', '500k', '365k'), allowNull: false, field: 'package_type' },
     amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
     paymentCode: { type: DataTypes.STRING(50), allowNull: false, unique: true, field: 'payment_code' },
     status: { type: DataTypes.ENUM('pending', 'paid', 'expired', 'completed'), allowNull: false, defaultValue: 'pending' },

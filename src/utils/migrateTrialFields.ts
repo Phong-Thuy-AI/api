@@ -31,6 +31,14 @@ async function runMigration() {
       }
     }
 
+    // 3. Cập nhật ENUM cho cột package_type trong bảng orders
+    try {
+      await sequelize.query("ALTER TABLE orders MODIFY COLUMN package_type ENUM('200k', '500k', '365k') NOT NULL;");
+      console.log('✅ Đã cập nhật ENUM `package_type` cho bảng `orders` thành công.');
+    } catch (e: any) {
+      console.log('⚠️ Không thể cập nhật ENUM `package_type`, có thể bảng `orders` không tồn tại hoặc lỗi khác:', e.message || e);
+    }
+
     console.log('--- MIGRATION HOÀN THÀNH ---');
     process.exit(0);
   } catch (error: any) {
