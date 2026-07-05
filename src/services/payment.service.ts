@@ -170,7 +170,6 @@ export async function checkAndUpdateOrderStatus(orderId: number): Promise<{ paid
           await user.save({ transaction: t });
         }
         order.status = 'completed';
-        order.completedAt = new Date();
         await order.save({ transaction: t });
       } else {
         const sourceType = user?.referredByCode ? 'referral' : 'direct';
@@ -247,7 +246,6 @@ export async function forcePayOrder(orderId: number): Promise<Order> {
         await user.save({ transaction: t });
       }
       order.status = 'completed';
-      order.completedAt = new Date();
       await order.save({ transaction: t });
     } else {
       const sourceType = user?.referredByCode ? 'referral' : 'direct';
@@ -327,7 +325,6 @@ export async function checkAllPendingOrders(): Promise<void> {
             await user.save({ transaction: t });
           }
           order.status = 'completed';
-          order.completedAt = new Date();
           await order.save({ transaction: t });
           t.afterCommit(async () => {
             console.log(`[Payment Sweeper] Đơn hàng gia hạn #${order.id} đã hoàn thành tự động qua background sweeper.`);
