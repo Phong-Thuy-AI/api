@@ -7,21 +7,22 @@ import { checkAllPendingOrders } from '@/services/payment.service';
 import { MENH_LIST, FOCUS_AREAS } from '@/utils/constants';
 import { calculateLifePath, calculatePersonalVibrations, getCurrentPinnacle } from '@/utils/numerology';
 import { signToken } from '@/utils/jwt';
+import { getICTDateString, getICTDateStrVN, getLunarDetails } from '@/utils/date';
 
 /**
  * Tạo tử vi hằng ngày cá nhân hóa cho từng User có gói đăng ký còn hiệu lực.
  * Upsert vào bảng daily_horoscopes (unique index: date + user_id).
  */
-export async function generateAllDailyHoroscopes(): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
-  const dateStr = new Date().toLocaleDateString('vi-VN', {
-    day: '2-digit', month: '2-digit', year: 'numeric'
-  });
+export async function generateAllDailyHoroscopes(targetDate?: Date): Promise<void> {
+  const runDate = targetDate || new Date();
+  const today = getICTDateString(runDate);
+  const dateStr = getICTDateStrVN(runDate);
+  const lunar = getLunarDetails(runDate);
 
   // Tìm tất cả user có subscription còn hiệu lực
   const activeUsers = await User.findAll({
     where: {
-      horoscopeExpiresAt: { [Op.gt]: new Date() },
+      horoscopeExpiresAt: { [Op.gt]: runDate },
       focusArea: { [Op.not]: null }
     }
   });
@@ -51,15 +52,20 @@ export async function generateAllDailyHoroscopes(): Promise<void> {
 
       // Tính toán chỉ số thần số học hằng ngày
       const { lifePath, reducedLifePath } = calculateLifePath(dobStr);
-      const targetDate = new Date();
-      const { personalYear, personalMonth, personalDay } = calculatePersonalVibrations(dobStr, targetDate);
-      const currentPinnacle = getCurrentPinnacle(dobStr, reducedLifePath, targetDate);
+      const { personalYear, personalMonth, personalDay } = calculatePersonalVibrations(dobStr, runDate);
+      const currentPinnacle = getCurrentPinnacle(dobStr, reducedLifePath, runDate);
 
       const content = await generateDailyHoroscope({
         name: user.name,
         menh: user.menh,
         focusArea: user.focusArea!,
         dateStr,
+        lunarDateStr: lunar.lunarDateStr,
+        canChiYear: lunar.canChiYear,
+        canChiMonth: lunar.canChiMonth,
+        canChiDay: lunar.canChiDay,
+        truc: lunar.truc,
+        dayRating: lunar.dayRating,
         lifePath,
         personalYear,
         personalMonth,
@@ -97,15 +103,14 @@ export async function generateAllDailyHoroscopes(): Promise<void> {
 /**
  * Gửi email tử vi ngày hôm nay đến tất cả user có subscription còn hiệu lực.
  */
-export async function sendAllDailyEmails(): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
-  const dateStr = new Date().toLocaleDateString('vi-VN', {
-    day: '2-digit', month: '2-digit', year: 'numeric'
-  });
+export async function sendAllDailyEmails(targetDate?: Date): Promise<void> {
+  const runDate = targetDate || new Date();
+  const today = getICTDateString(runDate);
+  const dateStr = getICTDateStrVN(runDate);
 
   const activeUsers = await User.findAll({
     where: {
-      horoscopeExpiresAt: { [Op.gt]: new Date() },
+      horoscopeExpiresAt: { [Op.gt]: runDate },
       focusArea: { [Op.not]: null },
       email: { [Op.and]: [{ [Op.not]: null }, { [Op.ne]: '' }] }
     }
@@ -210,8 +215,9 @@ export function initCronJobs(): void {
   // 0:00 mỗi ngày, múi giờ Việt Nam
   cron.schedule('0 0 * * *', async () => {
     console.log('[Cron] Daily horoscope job triggered at 00:00 ICT.');
-    await generateAllDailyHoroscopes();
-    await sendAllDailyEmails();
+    const now = new Date();
+    await generateAllDailyHoroscopes(now);
+    await sendAllDailyEmails(now);
     await sendExpirationAlerts();
   }, {
     timezone: 'Asia/Ho_Chi_Minh'

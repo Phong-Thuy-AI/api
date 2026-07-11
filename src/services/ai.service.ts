@@ -210,6 +210,12 @@ export interface DailyHoroscopeParams {
   menh: string;
   focusArea: string;
   dateStr: string;
+  lunarDateStr: string;
+  canChiYear: string;
+  canChiMonth: string;
+  canChiDay: string;
+  truc: string;
+  dayRating: string;
   lifePath: number;
   personalYear: number;
   personalMonth: number;
@@ -226,6 +232,12 @@ export async function generateDailyHoroscope(params: DailyHoroscopeParams): Prom
 
   const prompt = `Hãy viết một bản tin nhắc nhở vận khí hằng ngày (Tử vi hằng ngày) cá nhân hóa, sâu sắc và mang tính chiêm nghiệm văn hóa cho ngày Dương lịch là ${params.dateStr} bằng tiếng Việt.
 
+Thông tin Lịch Vạn Niên của ngày hôm nay (SỬ DỤNG CHÍNH XÁC CÁC THÔNG TIN DƯỚI ĐÂY, TUYỆT ĐỐI KHÔNG TỰ TÍNH TOÁN HAY THAY ĐỔI):
+- Ngày Âm lịch: ${params.lunarDateStr}
+- Bát tự Can Chi: Năm ${params.canChiYear}, Tháng ${params.canChiMonth}, Ngày ${params.canChiDay}
+- Trực ngày: Trực ${params.truc}
+- Đánh giá ngày: Ngày ${params.dayRating}
+
 Thông tin người dùng:
 - Họ tên: ${params.name}
 - Mệnh theo ngày tháng sinh: ${params.menh}
@@ -238,12 +250,13 @@ Thông tin Thần số học hôm nay:
 - Giai đoạn đỉnh cao hiện tại: Đỉnh ${params.currentPinnacle.phase} (mốc tuổi ${params.currentPinnacle.age}, tần số rung động ${params.currentPinnacle.value})
 
 Yêu cầu nội dung bản tin tử vi hằng ngày:
-1. Đầu tiên, hãy đóng vai trò Dịch sư và tính toán chi tiết Lịch Vạn Niên của ngày ${params.dateStr} (bao gồm: Ngày Âm lịch tương ứng, Can Chi của ngày/tháng/năm, Trực của ngày, ngày Hoàng đạo hay Hắc đạo, Hướng xuất hành tốt và các Tuổi xung khắc).
+1. Đầu tiên, hãy viết phần Lịch Vạn Niên & Vận Khí Hôm Nay bằng cách trình bày chính xác các thông tin Lịch Vạn Niên đã được cung cấp ở trên (bao gồm: Ngày Dương lịch, Ngày Âm lịch tương ứng, Can Chi của ngày/tháng/năm, Trực của ngày, ngày Hoàng đạo hay Hắc đạo. Hãy tự đưa ra thêm thông tin về Hướng xuất hành tốt và các Tuổi xung khắc dựa trên Can Chi ngày đã cho).
 2. Hãy kết hợp hài hòa thông tin Lịch Vạn Niên trên với Con số chủ đạo, Mệnh ngày tháng sinh, Ngày cá nhân (Số ${params.personalDay}), ${tobInstruction} và vấn đề cải vận "${params.focusArea}" của họ để luận giải vận khí.
 3. Bản tin gửi cho người dùng phải có cấu trúc Markdown rõ ràng gồm 3 phần chính (không thêm lời mở đầu hay kết thúc rườm rà):
 
 ### 📅 LỊCH VẠN NIÊN & VẬN KHÍ HÔM NAY
-- Ngày Âm lịch & Bát tự Can Chi ngày.
+- Ngày Dương lịch & Ngày Âm lịch tương ứng.
+- Bát tự Can Chi của ngày.
 - Đánh giá ngày (Hoàng đạo/Hắc đạo) & Trực của ngày.
 
 ### 🔮 DỰ BÁO CÁ NHÂN HẰNG NGÀY
@@ -252,7 +265,7 @@ Yêu cầu nội dung bản tin tử vi hằng ngày:
 ### 💡 LỜI KHUYÊN HÀNH ĐỘNG
 - Nên làm gì và tránh làm gì hôm nay để mọi việc hanh thông cát lợi.
 - Các khung giờ Hoàng đạo tốt trong ngày để khởi sự.
-- Hướng xuất hành (Tài thần/Hỷ thần) và các tuổi xung khắc cần đề phòng.
+- Hướng xuất hành (Tài thần/Hỷ thần) và các tuổi xung khắc cần đề phòng (tính toán dựa trên Can Chi ngày là ${params.canChiDay}).
 
 *Lưu ý:*
 - Hãy viết ngắn gọn, súc tích, dễ hiểu và mang năng lượng tích cực, truyền cảm hứng.
