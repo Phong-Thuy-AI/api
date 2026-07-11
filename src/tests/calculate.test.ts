@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { calculateMenh, calculateMenhNien, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
+import { calculateMenh, calculateMenhNien, calculateNguHanhDeepInsight, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
 
 describe('Thuật toán tính Mệnh - calculateMenh()', () => {
   test('Xác định mệnh Thổ (Ngày giao mùa)', () => {
@@ -157,15 +157,24 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
     })).toThrow();
   });
 
-  test('Chấm điểm cơ bản thành công (Không kích hoạt luật ghi đè)', () => {
-    // Tiền: CÁT (16.67đ), Trung: BÁN CÁT (8.33đ), Hậu: CÁT (16.67đ) -> Tổng: 41.67đ
+  test('Chấm điểm cơ bản theo thang 15-15-20, Bán Cát/Bán Hung tính 0 điểm', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'CÁT',
       trung: 'BÁN CÁT',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(41.67);
-    expect(result.rating).toBe('Cát');
+    expect(result.score).toBe(10);
+    expect(result.rating).toBe('Không tốt');
+  });
+
+  test('Case Cát / Đại Hung / Đại Cát ra 20/50 điểm', () => {
+    const result = calculateVanQueSim('123456', false, {
+      tien: 'CÁT',
+      trung: 'ĐẠI HUNG',
+      hau: 'ĐẠI CÁT'
+    });
+    expect(result.score).toBe(20);
+    expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
 
   test('Quy tắc Hậu vận (Trọng yếu) - Hậu vận Hung -> 0 điểm, Khuyên bỏ SIM', () => {
@@ -190,25 +199,39 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
     expect(result.rating).toBe('Khuyên đổi SIM');
   });
 
-  test('Quy tắc Tiền vận - Dùng trên 6 tháng & Tiền vận Hung -> Bỏ qua luật sập điểm, tính điểm bình thường', () => {
-    // Dùng trên 6 tháng, Tiền vận Đại Hung (0đ), Trung vận Cát (16.67đ), Hậu vận Cát (16.67đ) -> 33.34đ
+  test('Quy tắc Tiền vận - Dùng trên 6 tháng & Tiền vận Hung -> Tính điểm bình thường theo 15-15-20', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'ĐẠI HUNG',
       trung: 'CÁT',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(33.34);
-    expect(result.rating).toBe('Ổn nhưng điểm thấp');
+    expect(result.score).toBe(10);
+    expect(result.rating).toBe('Không tốt');
   });
 
-  test('Quy tắc Trung vận bị Hung nhưng Hậu vận Cát -> Gán cố định 20 điểm, Ổn nhưng điểm thấp', () => {
-    // Tiền: CÁT, Trung: HUNG, Hậu: CÁT -> Thỏa mãn điều kiện ghi đè -> Gán cố định 20đ
+  test('Trung vận Hung nhưng Hậu vận Cát tính theo điểm từng vận, không gán cố định', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'CÁT',
       trung: 'HUNG',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(20);
-    expect(result.rating).toBe('Ổn nhưng điểm thấp');
+    expect(result.score).toBe(10);
+    expect(result.rating).toBe('Không tốt');
+  });
+
+  test('Chiêm nghiệm chuyên sâu quét cặp từ trái sang phải và không trả cặp số cụ thể', () => {
+    const result = calculateNguHanhDeepInsight('0949641178', 'Thủy');
+    expect(result.mainLifeElement).toBe('Thủy');
+    expect(result.groups).toHaveLength(5);
+    expect(result.groups.map(group => group.label)).toEqual([
+      'Gia đạo',
+      'Tình duyên',
+      'Sức khỏe',
+      'Công danh',
+      'Sự nghiệp'
+    ]);
+    expect(result.groups.every(group => group.score >= 0 && group.score <= 20)).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('17');
+    expect(JSON.stringify(result)).not.toContain('78');
   });
 });

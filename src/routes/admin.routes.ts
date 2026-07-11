@@ -14,7 +14,8 @@ import {
   getAiModels,
   testAiConnection,
   testEmailSend,
-  getEmailLogs
+  getEmailLogs,
+  getReportOverview
 } from '@/controllers/admin.controller';
 import { requireAdmin } from '@/middlewares/auth.middleware';
 import { asyncHandler } from '@/utils/asyncHandler';
@@ -32,6 +33,7 @@ router.get('/config/:key', asyncHandler(getConfig));
 
 // Trigger thủ công job tạo tử vi hằng ngày
 router.post('/trigger-horoscopes', asyncHandler(triggerDailyHoroscopes));
+router.get('/reports/overview', asyncHandler(getReportOverview));
 
 // Quản lý Đơn hàng
 router.get('/orders', asyncHandler(getOrders));

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { User, Hexagram } from '@/models';
-import { calculateMenh, calculateMenhNien, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
+import { User, Hexagram, SimCheckEvent } from '@/models';
+import { calculateMenh, calculateMenhNien, calculateNguHanhDeepInsight, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
 import { signToken } from '@/utils/jwt';
 import { sendSuccess } from '@/utils/response';
 import { generateSimAnalysis } from '@/services/ai.service';
@@ -39,6 +39,13 @@ async function getUniqueReferralCode(baseCode: string): Promise<string> {
     uniqueCode = `${baseCode}${counter}`;
   }
   return uniqueCode;
+}
+
+function getOverallRating(totalScore: number): string {
+  if (totalScore >= 80) return 'Tot';
+  if (totalScore >= 65) return 'Kha';
+  if (totalScore >= 50) return 'Trung binh';
+  return 'Can xem lai';
 }
 
 /**
@@ -126,7 +133,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
   }
 
   if (focusArea) {
-    const validFocusAreas = ['Gia đạo', 'Tình duyên', 'Công việc', 'Công danh', 'Sự nghiệp'];
+    const validFocusAreas = ['Gia đạo', 'Tình duyên', 'Sức khỏe', 'Công việc', 'Công danh', 'Sự nghiệp'];
     if (!validFocusAreas.includes(focusArea)) {
       throw {
         statusCode: 400,
@@ -171,6 +178,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     rating: nguHanhResultNgayThang.rating,
     details: combinedDetails
   };
+  const nguHanhDeepInsight = calculateNguHanhDeepInsight(cleanPhone, menh);
 
   const phoneLast6 = cleanPhone.slice(-6);
   const tienVanStr = phoneLast6.substring(0, 4);
@@ -219,7 +227,8 @@ export async function checkFengShuiSim(req: Request, res: Response) {
       c_hop: nguHanhResult.c_hop,
       c_khac: nguHanhResult.c_khac,
       rating: nguHanhResult.rating,
-      details: nguHanhResult.details
+      details: nguHanhResult.details,
+      deepInsight: nguHanhDeepInsight
     },
     vanQue: {
       score: vanQueResult.score,
@@ -269,6 +278,15 @@ export async function checkFengShuiSim(req: Request, res: Response) {
   }
 
   // 4. Đặt cookie session `user_token` HttpOnly
+  SimCheckEvent.create({
+    userId: user.id,
+    phoneLast4: cleanPhone.slice(-4),
+    totalScore,
+    rating: getOverallRating(totalScore),
+    focusArea: focusArea || null,
+    referredByCode: referredByCode || user.referredByCode || null
+  }).catch(err => console.error('[Analytics] Failed to track SIM check:', err));
+
   const token = signToken({ userId: user.id, role: 'user' }, '30d');
   const isProduction = process.env.NODE_ENV === 'production';
   res.cookie('user_token', token, {
@@ -334,7 +352,8 @@ export async function checkFengShuiSim(req: Request, res: Response) {
         c_hop: nguHanhResult.c_hop,
         c_khac: nguHanhResult.c_khac,
         rating: nguHanhResult.rating,
-        details: nguHanhResult.details
+        details: nguHanhResult.details,
+        deepInsight: nguHanhDeepInsight
       },
       vanQue: {
         score: vanQueResult.score,

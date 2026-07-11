@@ -7,6 +7,8 @@ import { ChatMessage } from './chatMessage.model'
 import { DailyHoroscope } from './dailyHoroscope.model'
 import { SystemConfig } from './systemConfig.model'
 import { DailyEmailLog } from './dailyEmailLog.model'
+import { AnalyticsPageView } from './analyticsPageView.model'
+import { SimCheckEvent } from './simCheckEvent.model'
 
 // Define Associations
 
@@ -35,7 +37,9 @@ export {
   ChatMessage,
   DailyHoroscope,
   SystemConfig,
-  DailyEmailLog
+  DailyEmailLog,
+  AnalyticsPageView,
+  SimCheckEvent
 }
 
 export default {
@@ -47,5 +51,7 @@ export default {
   ChatMessage,
   DailyHoroscope,
   SystemConfig,
-  DailyEmailLog
+  DailyEmailLog,
+  AnalyticsPageView,
+  SimCheckEvent
 }

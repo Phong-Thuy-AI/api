@@ -7,6 +7,20 @@ export interface NguHanhResult {
   details: string;     // Diễn giải chi tiết bằng tiếng Việt
 }
 
+export interface NguHanhDeepInsightGroup {
+  key: 'giaDao' | 'tinhDuyen' | 'sucKhoe' | 'congDanh' | 'suNghiep';
+  label: string;
+  score: number;
+  maxScore: 20;
+  level: 'Cần cải thiện' | 'Trung bình' | 'Khá' | 'Tốt';
+  summary: string;
+}
+
+export interface NguHanhDeepInsight {
+  mainLifeElement: string;
+  groups: NguHanhDeepInsightGroup[];
+}
+
 export interface VanQueResult {
   score: number;       // Điểm vận quẻ (0, 20, 25, 50)
   rating: 'Cát' | 'Khuyên đổi SIM' | 'Khuyên bỏ SIM' | 'Ổn nhưng điểm thấp' | 'Không tốt';
@@ -179,6 +193,159 @@ export function calculateNguHanhSim(phone: string, menh: 'Kim' | 'Mộc' | 'Th�
   return { score, c_sinh, c_hop, c_khac, rating, details };
 }
 
+type NguHanhElement = 'Kim' | 'Mộc' | 'Thủy' | 'Hỏa' | 'Thổ';
+
+function getDigitNguHanh(digit: string): NguHanhElement | null {
+  if (digit === '4' || digit === '6') return 'Kim';
+  if (digit === '3' || digit === '7') return 'Mộc';
+  if (digit === '0' || digit === '1') return 'Thủy';
+  if (digit === '9') return 'Hỏa';
+  if (digit === '2' || digit === '5' || digit === '8') return 'Thổ';
+  return null;
+}
+
+function getDeepInsightLevel(score: number): NguHanhDeepInsightGroup['level'] {
+  if (score >= 16) return 'Tốt';
+  if (score >= 11) return 'Khá';
+  if (score >= 6) return 'Trung bình';
+  return 'Cần cải thiện';
+}
+
+function buildDeepInsightGroup(
+  key: NguHanhDeepInsightGroup['key'],
+  label: string,
+  score: number,
+  summaries: Record<NguHanhDeepInsightGroup['level'], string>
+): NguHanhDeepInsightGroup {
+  const normalizedScore = Math.max(0, Math.min(20, score));
+  const level = getDeepInsightLevel(normalizedScore);
+  return {
+    key,
+    label,
+    score: normalizedScore,
+    maxScore: 20,
+    level,
+    summary: summaries[level]
+  };
+}
+
+/**
+ * Chấm điểm chiêm nghiệm chuyên sâu theo cặp số liền kề.
+ * Chỉ trả điểm/nhận xét theo nhóm, không trả các cặp số cụ thể ra UI khách.
+ */
+export function calculateNguHanhDeepInsight(phone: string, mainLifeElement: string): NguHanhDeepInsight {
+  const cleanPhone = phone.replace(/\D/g, '');
+  const elements = cleanPhone
+    .split('')
+    .map(getDigitNguHanh)
+    .filter((element): element is NguHanhElement => Boolean(element));
+
+  const hasElement = (element: NguHanhElement): boolean => elements.includes(element);
+  const hasDigit = (digit: string): boolean => cleanPhone.includes(digit);
+  const hasOrderedPair = (from: NguHanhElement, to: NguHanhElement): boolean => {
+    for (let i = 0; i < elements.length - 1; i++) {
+      if (elements[i] === from && elements[i + 1] === to) return true;
+    }
+    return false;
+  };
+
+  const scoreFromSignals = (signals: boolean[]): number =>
+    signals.reduce((total, matched) => total + (matched ? 5 : 0), 0);
+
+  const healthCyclePairs: Array<[NguHanhElement, NguHanhElement]> = [
+    ['Thủy', 'Mộc'],
+    ['Mộc', 'Hỏa'],
+    ['Hỏa', 'Thổ'],
+    ['Thổ', 'Kim'],
+    ['Kim', 'Thủy']
+  ];
+  const healthScore = Math.min(
+    20,
+    healthCyclePairs.reduce((total, [from, to]) => total + (hasOrderedPair(from, to) ? 4 : 0), 0)
+  );
+
+  return {
+    mainLifeElement,
+    groups: [
+      buildDeepInsightGroup(
+        'giaDao',
+        'Gia đạo',
+        scoreFromSignals([
+          hasElement('Thổ'),
+          hasElement('Mộc'),
+          hasOrderedPair('Thổ', 'Mộc'),
+          hasOrderedPair('Mộc', 'Thổ')
+        ]),
+        {
+          'Cần cải thiện': 'Năng lượng gia đạo còn mỏng, nên ưu tiên tư vấn để tăng sự ổn định và gắn kết.',
+          'Trung bình': 'Gia đạo có nền tảng nhưng chưa thật dày, cần bổ sung thêm yếu tố nuôi dưỡng và bền vững.',
+          'Khá': 'Gia đạo có tín hiệu nâng đỡ khá rõ, phù hợp để phát triển sự hòa hợp trong gia đình.',
+          'Tốt': 'Gia đạo nổi bật về sự ổn định, bao dung và khả năng nuôi dưỡng lâu dài.'
+        }
+      ),
+      buildDeepInsightGroup(
+        'tinhDuyen',
+        'Tình duyên',
+        scoreFromSignals([
+          hasElement('Mộc'),
+          hasElement('Thủy'),
+          hasOrderedPair('Mộc', 'Thủy'),
+          hasOrderedPair('Thủy', 'Mộc')
+        ]),
+        {
+          'Cần cải thiện': 'Tình duyên thiếu độ mềm mại và kết nối, nên xem kỹ phần cảm xúc khi tư vấn.',
+          'Trung bình': 'Tình duyên có tín hiệu giao tiếp nhưng chưa đều, cần thêm sự hài hòa trong tương tác.',
+          'Khá': 'Tình duyên có khả năng phát triển qua cảm xúc, giao tiếp và sự thấu hiểu.',
+          'Tốt': 'Tình duyên sáng về sự mềm mại, cảm xúc và khả năng nuôi dưỡng mối quan hệ.'
+        }
+      ),
+      buildDeepInsightGroup(
+        'sucKhoe',
+        'Sức khỏe',
+        healthScore,
+        {
+          'Cần cải thiện': 'Dòng ngũ hành cho sức khỏe chưa liên tục, nên chú ý cân bằng sinh khí.',
+          'Trung bình': 'Sức khỏe có một phần dòng sinh khí nhưng chưa liền mạch, cần theo dõi thêm.',
+          'Khá': 'Sức khỏe có nhiều nhịp tương sinh hỗ trợ, nền năng lượng tương đối ổn.',
+          'Tốt': 'Sức khỏe có dòng tương sinh liên tục, thể hiện sinh khí vận hành hài hòa.'
+        }
+      ),
+      buildDeepInsightGroup(
+        'congDanh',
+        'Công danh',
+        scoreFromSignals([
+          hasOrderedPair('Kim', 'Thổ') || hasOrderedPair('Thổ', 'Kim'),
+          hasElement('Hỏa'),
+          hasOrderedPair('Kim', 'Hỏa'),
+          hasOrderedPair('Mộc', 'Thủy') || hasOrderedPair('Thủy', 'Mộc')
+        ]),
+        {
+          'Cần cải thiện': 'Công danh chưa có nhiều tín hiệu về uy tín, danh tiếng và học hành.',
+          'Trung bình': 'Công danh có điểm tựa nhưng chưa mạnh, cần thêm năng lượng tổ chức và tỏa sáng.',
+          'Khá': 'Công danh có tín hiệu tốt về uy tín, năng lực học hỏi và sức ảnh hưởng.',
+          'Tốt': 'Công danh nổi bật về tổ chức, thăng tiến, danh tiếng và khả năng dẫn dắt.'
+        }
+      ),
+      buildDeepInsightGroup(
+        'suNghiep',
+        'Sự nghiệp',
+        scoreFromSignals([
+          hasOrderedPair('Thủy', 'Kim') || hasOrderedPair('Kim', 'Thủy'),
+          hasOrderedPair('Thủy', 'Mộc'),
+          hasElement('Thổ'),
+          hasDigit('8')
+        ]),
+        {
+          'Cần cải thiện': 'Sự nghiệp và tài lộc còn thiếu tín hiệu tụ tài, nên ưu tiên xem phần tiền bạc.',
+          'Trung bình': 'Sự nghiệp có tín hiệu kinh doanh hoặc giữ tiền nhưng chưa thật vững.',
+          'Khá': 'Sự nghiệp có dòng tiền và nền giữ tài khá tốt, phù hợp để phát triển thêm.',
+          'Tốt': 'Sự nghiệp sáng về kinh doanh, dòng tiền sinh sôi và khả năng tụ tài.'
+        }
+      )
+    ]
+  };
+}
+
 /**
  * Tính toán 3 Vận quẻ SIM (Tiền/Trung/Hậu vận) từ 6 số cuối.
  * Áp dụng các luật ưu tiên ghi đè cát hung.
@@ -210,34 +377,35 @@ export function calculateVanQueSim(
   const trungVanQue = calculateQueNumber(trungVanStr);
   const hauVanQue = calculateQueNumber(hauVanStr);
 
-  const tienClass = classifications.tien.toUpperCase();
-  const trungClass = classifications.trung.toUpperCase();
-  const hauClass = classifications.hau.toUpperCase();
+  const normalizeClassification = (classification: string): string =>
+    classification
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/Đ/g, 'D')
+      .replace(/đ/g, 'd')
+      .toUpperCase();
 
-  // Chấm điểm cơ bản (Cát/Đại Cát = 16.67đ, Bán Cát - Bán Hung = 8.33đ, Hung/Đại Hung = 0đ)
-  const getBasicScore = (classification: string): number => {
-    if (classification.includes('ĐẠI CÁT') || classification === 'CÁT') {
-      return 16.67;
-    }
-    if (classification.includes('BÁN CÁT') || classification.includes('BÁN HUNG')) {
-      return 8.33;
-    }
-    // HUNG, ĐẠI HUNG
+  const tienClass = normalizeClassification(classifications.tien);
+  const trungClass = normalizeClassification(classifications.trung);
+  const hauClass = normalizeClassification(classifications.hau);
+
+  const getPeriodScore = (classification: string, maxScore: 15 | 20): number => {
+    if (classification.includes('DAI CAT')) return maxScore === 20 ? 15 : 10;
+    if (classification === 'CAT') return 5;
     return 0;
   };
 
-  const tienBasic = getBasicScore(tienClass);
-  const trungBasic = getBasicScore(trungClass);
-  const hauBasic = getBasicScore(hauClass);
+  const tienBasic = getPeriodScore(tienClass, 15);
+  const trungBasic = getPeriodScore(trungClass, 15);
+  const hauBasic = getPeriodScore(hauClass, 20);
 
-  let score = parseFloat((tienBasic + trungBasic + hauBasic).toFixed(2));
-  if (score > 50) score = 50; // Giới hạn tối đa 50đ
+  let score = tienBasic + trungBasic + hauBasic;
 
   let rating: VanQueResult['rating'] = 'Không tốt';
   let details = '';
 
-  const isHung = (cls: string) => cls.includes('ĐẠI HUNG') || cls === 'HUNG';
-  const isCat = (cls: string) => cls.includes('ĐẠI CÁT') || cls === 'CÁT';
+  const isHung = (cls: string) => cls.includes('DAI HUNG') || cls === 'HUNG';
 
   // 2. Áp dụng quy tắc ghi đè (Overrides)
   
@@ -252,12 +420,6 @@ export function calculateVanQueSim(
     score = 0;
     rating = 'Khuyên đổi SIM';
     details = `Cảnh báo: Thời gian dùng SIM dưới 6 tháng và Tiền vận gặp quẻ xấu (${classifications.tien}). Vì bạn đang ở giai đoạn đầu chịu năng lượng trực tiếp từ Tiền vận xấu, khuyên bạn nên đổi SIM sớm để tránh xui xẻo.`;
-  }
-  // Quy tắc Trung vận bị Hung nhưng Hậu vận Cát/Đại Cát -> gán cố định 20 điểm, Ổn nhưng điểm thấp
-  else if (isHung(trungClass) && isCat(hauClass)) {
-    score = 20;
-    rating = 'Ổn nhưng điểm thấp';
-    details = `SIM có Trung vận gặp sóng gió, trắc trở (${classifications.trung}) nhưng nhờ Hậu vận tốt đẹp (${classifications.hau}) bù đắp nên vẫn giữ được hậu về sau. Đánh giá ở mức tạm ổn nhưng điểm số bị hạn chế cố định ở mức 20/50 điểm.`;
   }
   // Trường hợp tính điểm bình thường không bị ghi đè
   else {
