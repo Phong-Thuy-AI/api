@@ -7,6 +7,7 @@ import { sendSuccess } from '@/utils/response';
 import { generateAllDailyHoroscopes, sendAllDailyEmails, sendExpirationAlerts } from '@/services/cron.service';
 import { forcePayOrder } from '@/services/payment.service';
 import { getIO } from '@/services/socket.service';
+import { getICTParts, getICTDateStrVN } from '@/utils/date';
 
 /**
  * Lưu hoặc cập nhật một giá trị cấu hình hệ thống
@@ -61,13 +62,33 @@ export async function getConfig(req: Request, res: Response) {
  * POST /api/v1/admin/trigger-horoscopes
  */
 export async function triggerDailyHoroscopes(req: Request, res: Response) {
+  let targetDate = new Date();
+  const dateQuery = req.query.date;
+
+  if (dateQuery && typeof dateQuery === 'string') {
+    const parsed = new Date(dateQuery);
+    if (!isNaN(parsed.getTime())) {
+      targetDate = parsed;
+    }
+  } else {
+    // Nếu kích hoạt sau 18h tối (giờ Việt Nam), tự động tạo tử vi cho ngày hôm sau
+    const parts = getICTParts(targetDate);
+    if (parts.hour >= 18) {
+      targetDate = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000);
+    }
+  }
+
   // Chạy ngầm, không chờ để tránh timeout HTTP
-  generateAllDailyHoroscopes()
-    .then(() => sendAllDailyEmails())
+  generateAllDailyHoroscopes(targetDate)
+    .then(() => sendAllDailyEmails(targetDate))
     .then(() => sendExpirationAlerts())
     .catch(err => console.error('[Admin] triggerDailyHoroscopes error:', err));
 
-  return sendSuccess(res, null, 'Đã kích hoạt job tạo tử vi hằng ngày. Quá trình đang chạy ngầm.');
+  return sendSuccess(
+    res,
+    null,
+    `Đã kích hoạt job tạo tử vi hằng ngày cho ngày ${getICTDateStrVN(targetDate)}. Quá trình đang chạy ngầm.`
+  );
 }
 
 /**

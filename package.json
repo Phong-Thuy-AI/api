@@ -20,6 +20,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@dqcai/vn-lunar": "^1.0.1",
     "axios": "^1.16.1",
     "cookie": "^1.1.1",
     "cookie-parser": "^1.4.7",
@@ -31,7 +32,8 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^8.0.10",
     "sequelize": "^6.37.8",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "solarlunar": "^3.1.0"
   },
   "devDependencies": {
     "@types/cookie": "^0.6.0",
