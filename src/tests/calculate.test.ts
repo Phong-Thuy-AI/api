@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@jest/globals';
+﻿import { describe, test, expect } from '@jest/globals';
 import { calculateMenh, calculateMenhNien, calculateNguHanhDeepInsight, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
 
 describe('Thuật toán tính Mệnh - calculateMenh()', () => {
@@ -166,6 +166,15 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
     expect(result.score).toBe(10);
     expect(result.rating).toBe('Không tốt');
   });
+  test('Case Đại Cát / Cát / Đại Cát ra 30/50 điểm', () => {
+    const result = calculateVanQueSim('123456', false, {
+      tien: 'ĐẠI CÁT',
+      trung: 'CÁT',
+      hau: 'ĐẠI CÁT'
+    });
+    expect(result.score).toBe(30);
+    expect(result.rating).toBe('Ổn nhưng điểm thấp');
+  });
 
   test('Case Cát / Đại Hung / Đại Cát ra 20/50 điểm', () => {
     const result = calculateVanQueSim('123456', false, {
@@ -219,19 +228,46 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
     expect(result.rating).toBe('Không tốt');
   });
 
-  test('Chiêm nghiệm chuyên sâu quét cặp từ trái sang phải và không trả cặp số cụ thể', () => {
+  test('Chiêm nghiệm chuyên sâu trả điểm nhấn theo giai đoạn, không chấm điểm', () => {
     const result = calculateNguHanhDeepInsight('0949641178', 'Thủy');
     expect(result.mainLifeElement).toBe('Thủy');
-    expect(result.groups).toHaveLength(5);
-    expect(result.groups.map(group => group.label)).toEqual([
-      'Gia đạo',
-      'Tình duyên',
-      'Sức khỏe',
-      'Công danh',
-      'Sự nghiệp'
+    expect(result.periods.map(period => ({ key: period.key, digits: period.digits }))).toEqual([
+      { key: 'tienVan', digits: '09496411' },
+      { key: 'trungVan', digits: '4117' },
+      { key: 'hauVan', digits: '1178' }
     ]);
-    expect(result.groups.every(group => group.score >= 0 && group.score <= 20)).toBe(true);
-    expect(JSON.stringify(result)).not.toContain('17');
-    expect(JSON.stringify(result)).not.toContain('78');
+    expect(JSON.stringify(result)).not.toContain('score');
+    expect(JSON.stringify(result)).not.toContain('maxScore');
+
+    const tienNotes = result.periods[0].notes.map(note => note.matched);
+    const trungNotes = result.periods[1].notes.map(note => note.matched);
+    const hauNotes = result.periods[2].notes.map(note => note.matched);
+    expect(tienNotes).toContain('49');
+    expect(trungNotes).toContain('17');
+    expect(hauNotes).toEqual(expect.arrayContaining(['17', '78', '8']));
+  });
+
+  test('Chiêm nghiệm chuyên sâu không tính cặp đảo chiều', () => {
+    const result = calculateNguHanhDeepInsight('0000719487', 'Thủy');
+    const matched = result.periods.flatMap(period => period.notes.map(note => note.matched));
+    expect(matched).not.toContain('17');
+    expect(matched).not.toContain('49');
+    expect(matched).not.toContain('78');
+  });
+
+  test('Chiêm nghiệm chuyên sâu không có tín hiệu thì notes rỗng', () => {
+    const result = calculateNguHanhDeepInsight('22225555', 'Thổ');
+    expect(result.periods.every(period => period.notes.length === 0)).toBe(true);
+  });
+
+  test('Sức khỏe chỉ hiện khi có chuỗi tương sinh liên tục đủ 5 hành', () => {
+    const fullCycle = calculateNguHanhDeepInsight('013924600', 'Thủy');
+    expect(fullCycle.periods.flatMap(period => period.notes.map(note => note.code))).toContain('HEALTH_FULL_GENERATING_CYCLE');
+
+    const partialCycle = calculateNguHanhDeepInsight('22392600', 'Thủy');
+    expect(partialCycle.periods.flatMap(period => period.notes.map(note => note.code))).not.toContain('HEALTH_FULL_GENERATING_CYCLE');
   });
 });
+
+
+

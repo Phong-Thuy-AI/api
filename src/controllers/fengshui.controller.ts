@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { User, Hexagram, SimCheckEvent } from '@/models';
 import { calculateMenh, calculateMenhNien, calculateNguHanhDeepInsight, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
 import { signToken } from '@/utils/jwt';
@@ -48,6 +48,15 @@ function getOverallRating(totalScore: number): string {
   return 'Can xem lai';
 }
 
+function summarizeNguHanhDeepInsight(deepInsight: ReturnType<typeof calculateNguHanhDeepInsight>): string {
+  const lines = deepInsight.periods.flatMap(period =>
+    period.notes.map(note => `- ${period.label} (${period.digits}): ${note.matched} - ${note.title}. ${note.description}`)
+  );
+
+  return lines.length > 0
+    ? lines.join('\n')
+    : 'Không ghi nhận điểm nhấn cặp số rõ theo catalog hệ thống.';
+}
 /**
  * Gọi AI với timeout tối đa 50 giây, trả null nếu quá thời gian hoặc lỗi
  */
@@ -179,6 +188,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     details: combinedDetails
   };
   const nguHanhDeepInsight = calculateNguHanhDeepInsight(cleanPhone, menh);
+  const nguHanhDeepInsightSummary = summarizeNguHanhDeepInsight(nguHanhDeepInsight);
 
   const phoneLast6 = cleanPhone.slice(-6);
   const tienVanStr = phoneLast6.substring(0, 4);
@@ -307,6 +317,7 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     usedLessThan6Months,
     nguHanhScore: nguHanhResult.score,
     nguHanhDetails: nguHanhResult.details,
+    nguHanhDeepInsightSummary,
     vanQueScore: vanQueResult.score,
     vanQueDetails: vanQueResult.details,
     totalScore,
@@ -375,3 +386,5 @@ export async function checkFengShuiSim(req: Request, res: Response) {
     }
   }, 'Kiểm tra SIM phong thủy thành công.');
 }
+
+

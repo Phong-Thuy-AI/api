@@ -1,4 +1,4 @@
-export interface NguHanhResult {
+﻿export interface NguHanhResult {
   score: number;       // Điểm ngũ hành (0, 20, 40, 50)
   c_sinh: number;      // Số chữ số tương sinh
   c_hop: number;       // Số chữ số tương hỗ / tương hợp
@@ -7,20 +7,24 @@ export interface NguHanhResult {
   details: string;     // Diễn giải chi tiết bằng tiếng Việt
 }
 
-export interface NguHanhDeepInsightGroup {
-  key: 'giaDao' | 'tinhDuyen' | 'sucKhoe' | 'congDanh' | 'suNghiep';
-  label: string;
-  score: number;
-  maxScore: 20;
-  level: 'Cần cải thiện' | 'Trung bình' | 'Khá' | 'Tốt';
-  summary: string;
-}
-
 export interface NguHanhDeepInsight {
   mainLifeElement: string;
-  groups: NguHanhDeepInsightGroup[];
+  periods: NguHanhDeepInsightPeriod[];
 }
 
+export interface NguHanhDeepInsightPeriod {
+  key: 'tienVan' | 'trungVan' | 'hauVan';
+  label: string;
+  digits: string;
+  notes: NguHanhDeepInsightNote[];
+}
+
+export interface NguHanhDeepInsightNote {
+  code: string;
+  matched: string;
+  title: string;
+  description: string;
+}
 export interface VanQueResult {
   score: number;       // Điểm vận quẻ (0, 20, 25, 50)
   rating: 'Cát' | 'Khuyên đổi SIM' | 'Khuyên bỏ SIM' | 'Ổn nhưng điểm thấp' | 'Không tốt';
@@ -204,148 +208,129 @@ function getDigitNguHanh(digit: string): NguHanhElement | null {
   return null;
 }
 
-function getDeepInsightLevel(score: number): NguHanhDeepInsightGroup['level'] {
-  if (score >= 16) return 'Tốt';
-  if (score >= 11) return 'Khá';
-  if (score >= 6) return 'Trung bình';
-  return 'Cần cải thiện';
-}
-
-function buildDeepInsightGroup(
-  key: NguHanhDeepInsightGroup['key'],
-  label: string,
-  score: number,
-  summaries: Record<NguHanhDeepInsightGroup['level'], string>
-): NguHanhDeepInsightGroup {
-  const normalizedScore = Math.max(0, Math.min(20, score));
-  const level = getDeepInsightLevel(normalizedScore);
-  return {
-    key,
-    label,
-    score: normalizedScore,
-    maxScore: 20,
-    level,
-    summary: summaries[level]
-  };
-}
-
 /**
- * Chấm điểm chiêm nghiệm chuyên sâu theo cặp số liền kề.
- * Chỉ trả điểm/nhận xét theo nhóm, không trả các cặp số cụ thể ra UI khách.
+ * Ghi nhận các điểm nhấn chiêm nghiệm theo cặp số.
+ * Không chấm điểm, không đảo chiều cặp số: chỉ đọc đúng thứ tự trái sang phải.
  */
 export function calculateNguHanhDeepInsight(phone: string, mainLifeElement: string): NguHanhDeepInsight {
   const cleanPhone = phone.replace(/\D/g, '');
-  const elements = cleanPhone
-    .split('')
-    .map(getDigitNguHanh)
-    .filter((element): element is NguHanhElement => Boolean(element));
+  const phoneLast6 = cleanPhone.slice(-6);
 
-  const hasElement = (element: NguHanhElement): boolean => elements.includes(element);
-  const hasDigit = (digit: string): boolean => cleanPhone.includes(digit);
-  const hasOrderedPair = (from: NguHanhElement, to: NguHanhElement): boolean => {
-    for (let i = 0; i < elements.length - 1; i++) {
-      if (elements[i] === from && elements[i + 1] === to) return true;
+  const periods: Array<Omit<NguHanhDeepInsightPeriod, 'notes'>> = [
+    {
+      key: 'tienVan',
+      label: 'Tiền vận',
+      digits: cleanPhone.length > 2 ? cleanPhone.slice(0, -2) : cleanPhone
+    },
+    {
+      key: 'trungVan',
+      label: 'Trung vận',
+      digits: phoneLast6.substring(1, 5)
+    },
+    {
+      key: 'hauVan',
+      label: 'Hậu vận',
+      digits: phoneLast6.substring(2, 6)
     }
-    return false;
+  ];
+
+  const pairNotes: Record<string, Omit<NguHanhDeepInsightNote, 'matched'>> = {
+    '07': {
+      code: 'WATER_WOOD_07',
+      title: 'Thủy sinh Mộc',
+      description: 'Dòng tiền sinh sôi, có tín hiệu nuôi dưỡng tài lộc và mở rộng cơ hội.'
+    },
+    '03': {
+      code: 'WATER_WOOD_03',
+      title: 'Thủy sinh Mộc',
+      description: 'Dòng tiền sinh sôi, phù hợp câu chuyện bùng nổ tài lộc và tăng trưởng.'
+    },
+    '17': {
+      code: 'WATER_WOOD_17',
+      title: 'Thủy sinh Mộc',
+      description: 'Dòng tiền sinh sôi, dễ tạo đà phát triển và chuyển hóa tích cực.'
+    },
+    '13': {
+      code: 'WATER_WOOD_13',
+      title: 'Thủy sinh Mộc',
+      description: 'Dòng tiền sinh sôi, có điểm nhấn về tài lộc phát triển theo hướng bền dần.'
+    },
+    '69': {
+      code: 'LEADERSHIP_69',
+      title: 'Kim Hỏa',
+      description: 'Tín hiệu quyết đoán, lãnh đạo, uy tín và sức ảnh hưởng với người khác.'
+    },
+    '49': {
+      code: 'LEADERSHIP_49',
+      title: 'Kim Hỏa',
+      description: 'Tín hiệu quyết đoán, lãnh đạo, uy tín và sức ảnh hưởng với người khác.'
+    },
+    '78': {
+      code: 'WOOD_EARTH_78',
+      title: 'Mộc Thổ',
+      description: 'Tín hiệu sinh trưởng, nuôi dưỡng, tạo nền để tích lũy và phát triển.'
+    }
   };
 
-  const scoreFromSignals = (signals: boolean[]): number =>
-    signals.reduce((total, matched) => total + (matched ? 5 : 0), 0);
+  const buildPeriodNotes = (digits: string): NguHanhDeepInsightNote[] => {
+    const notes: NguHanhDeepInsightNote[] = [];
 
-  const healthCyclePairs: Array<[NguHanhElement, NguHanhElement]> = [
-    ['Thủy', 'Mộc'],
-    ['Mộc', 'Hỏa'],
-    ['Hỏa', 'Thổ'],
-    ['Thổ', 'Kim'],
-    ['Kim', 'Thủy']
-  ];
-  const healthScore = Math.min(
-    20,
-    healthCyclePairs.reduce((total, [from, to]) => total + (hasOrderedPair(from, to) ? 4 : 0), 0)
-  );
+    Object.entries(pairNotes).forEach(([pair, note]) => {
+      if (digits.includes(pair)) {
+        notes.push({ ...note, matched: pair });
+      }
+    });
+
+    if (digits.includes('8')) {
+      notes.push({
+        code: 'WEALTH_STORAGE_8',
+        matched: '8',
+        title: 'Kho chứa tài sản',
+        description: 'Có tín hiệu giữ tiền, tích lũy và tạo nền tài sản.'
+      });
+    }
+
+    const healthCycle = findContinuousGeneratingCycle(digits);
+    if (healthCycle) {
+      notes.push({
+        code: 'HEALTH_FULL_GENERATING_CYCLE',
+        matched: healthCycle,
+        title: 'Sức khỏe có dòng tương sinh đủ 5 hành',
+        description: 'Ngũ hành vận hành liên tục đủ 5 hành, là điểm nhấn về sinh khí và sự cân bằng.'
+      });
+    }
+
+    return notes;
+  };
 
   return {
     mainLifeElement,
-    groups: [
-      buildDeepInsightGroup(
-        'giaDao',
-        'Gia đạo',
-        scoreFromSignals([
-          hasElement('Thổ'),
-          hasElement('Mộc'),
-          hasOrderedPair('Thổ', 'Mộc'),
-          hasOrderedPair('Mộc', 'Thổ')
-        ]),
-        {
-          'Cần cải thiện': 'Năng lượng gia đạo còn mỏng, nên ưu tiên tư vấn để tăng sự ổn định và gắn kết.',
-          'Trung bình': 'Gia đạo có nền tảng nhưng chưa thật dày, cần bổ sung thêm yếu tố nuôi dưỡng và bền vững.',
-          'Khá': 'Gia đạo có tín hiệu nâng đỡ khá rõ, phù hợp để phát triển sự hòa hợp trong gia đình.',
-          'Tốt': 'Gia đạo nổi bật về sự ổn định, bao dung và khả năng nuôi dưỡng lâu dài.'
-        }
-      ),
-      buildDeepInsightGroup(
-        'tinhDuyen',
-        'Tình duyên',
-        scoreFromSignals([
-          hasElement('Mộc'),
-          hasElement('Thủy'),
-          hasOrderedPair('Mộc', 'Thủy'),
-          hasOrderedPair('Thủy', 'Mộc')
-        ]),
-        {
-          'Cần cải thiện': 'Tình duyên thiếu độ mềm mại và kết nối, nên xem kỹ phần cảm xúc khi tư vấn.',
-          'Trung bình': 'Tình duyên có tín hiệu giao tiếp nhưng chưa đều, cần thêm sự hài hòa trong tương tác.',
-          'Khá': 'Tình duyên có khả năng phát triển qua cảm xúc, giao tiếp và sự thấu hiểu.',
-          'Tốt': 'Tình duyên sáng về sự mềm mại, cảm xúc và khả năng nuôi dưỡng mối quan hệ.'
-        }
-      ),
-      buildDeepInsightGroup(
-        'sucKhoe',
-        'Sức khỏe',
-        healthScore,
-        {
-          'Cần cải thiện': 'Dòng ngũ hành cho sức khỏe chưa liên tục, nên chú ý cân bằng sinh khí.',
-          'Trung bình': 'Sức khỏe có một phần dòng sinh khí nhưng chưa liền mạch, cần theo dõi thêm.',
-          'Khá': 'Sức khỏe có nhiều nhịp tương sinh hỗ trợ, nền năng lượng tương đối ổn.',
-          'Tốt': 'Sức khỏe có dòng tương sinh liên tục, thể hiện sinh khí vận hành hài hòa.'
-        }
-      ),
-      buildDeepInsightGroup(
-        'congDanh',
-        'Công danh',
-        scoreFromSignals([
-          hasOrderedPair('Kim', 'Thổ') || hasOrderedPair('Thổ', 'Kim'),
-          hasElement('Hỏa'),
-          hasOrderedPair('Kim', 'Hỏa'),
-          hasOrderedPair('Mộc', 'Thủy') || hasOrderedPair('Thủy', 'Mộc')
-        ]),
-        {
-          'Cần cải thiện': 'Công danh chưa có nhiều tín hiệu về uy tín, danh tiếng và học hành.',
-          'Trung bình': 'Công danh có điểm tựa nhưng chưa mạnh, cần thêm năng lượng tổ chức và tỏa sáng.',
-          'Khá': 'Công danh có tín hiệu tốt về uy tín, năng lực học hỏi và sức ảnh hưởng.',
-          'Tốt': 'Công danh nổi bật về tổ chức, thăng tiến, danh tiếng và khả năng dẫn dắt.'
-        }
-      ),
-      buildDeepInsightGroup(
-        'suNghiep',
-        'Sự nghiệp',
-        scoreFromSignals([
-          hasOrderedPair('Thủy', 'Kim') || hasOrderedPair('Kim', 'Thủy'),
-          hasOrderedPair('Thủy', 'Mộc'),
-          hasElement('Thổ'),
-          hasDigit('8')
-        ]),
-        {
-          'Cần cải thiện': 'Sự nghiệp và tài lộc còn thiếu tín hiệu tụ tài, nên ưu tiên xem phần tiền bạc.',
-          'Trung bình': 'Sự nghiệp có tín hiệu kinh doanh hoặc giữ tiền nhưng chưa thật vững.',
-          'Khá': 'Sự nghiệp có dòng tiền và nền giữ tài khá tốt, phù hợp để phát triển thêm.',
-          'Tốt': 'Sự nghiệp sáng về kinh doanh, dòng tiền sinh sôi và khả năng tụ tài.'
-        }
-      )
-    ]
+    periods: periods.map(period => ({
+      ...period,
+      notes: buildPeriodNotes(period.digits)
+    }))
   };
 }
 
+function findContinuousGeneratingCycle(digits: string): string | null {
+  const cycle: NguHanhElement[] = ['Thủy', 'Mộc', 'Hỏa', 'Thổ', 'Kim'];
+  const digitElements = digits
+    .split('')
+    .map(digit => ({ digit, element: getDigitNguHanh(digit) }))
+    .filter((item): item is { digit: string; element: NguHanhElement } => Boolean(item.element));
+
+  for (let start = 0; start <= digitElements.length - cycle.length; start++) {
+    for (let offset = 0; offset < cycle.length; offset++) {
+      const expected = cycle.map((_, index) => cycle[(offset + index) % cycle.length]);
+      const actual = digitElements.slice(start, start + cycle.length).map(item => item.element);
+      if (expected.every((element, index) => element === actual[index])) {
+        return digitElements.slice(start, start + cycle.length).map(item => item.digit).join('');
+      }
+    }
+  }
+
+  return null;
+}
 /**
  * Tính toán 3 Vận quẻ SIM (Tiền/Trung/Hậu vận) từ 6 số cuối.
  * Áp dụng các luật ưu tiên ghi đè cát hung.
@@ -447,3 +432,5 @@ export function calculateVanQueSim(
     details
   };
 }
+
+

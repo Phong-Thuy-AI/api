@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import { SystemConfig } from '@/models';
 import {
   calculateLifePath,
@@ -113,6 +113,7 @@ export interface SimAnalysisParams {
   usedLessThan6Months: boolean;
   nguHanhScore: number;
   nguHanhDetails: string;
+  nguHanhDeepInsightSummary: string;
   vanQueScore: number;
   vanQueDetails: string;
   totalScore: number;
@@ -175,6 +176,11 @@ Yêu cầu về nội dung:
 - Trung vận: ${params.hexTrung}
 - Hậu vận: ${params.hexHau}
 
+**Điểm nhấn cặp số Ngũ hành đã được hệ thống tính sẵn:**
+${params.nguHanhDeepInsightSummary}
+
+*Quy tắc bắt buộc cho phần điểm nhấn cặp số:* Chỉ diễn giải các dòng hệ thống cung cấp ở trên. Không tự phát hiện thêm cặp số, không đảo chiều cặp số, không tự chấm điểm, không nói có tín hiệu nếu hệ thống ghi là không ghi nhận.
+
 **Yêu cầu cấu trúc Markdown đầu ra:**
 Bạn phải phân tích và trả về đúng định dạng Markdown có cấu trúc chính xác sau:
 
@@ -182,7 +188,7 @@ Bạn phải phân tích và trả về đúng định dạng Markdown có cấu
 [Diễn giải mối tương quan phong thủy của SIM với bản mệnh người dùng, ${focusText}. Hãy phân tích rõ tính chất phong thủy của các con số tương hợp/tương sinh với cả Mệnh theo năm sinh (${params.menhNien}) và Mệnh theo ngày tháng sinh (${params.menh}). Chỉ rõ mức độ tương tác, ảnh hưởng của sự trùng khớp hoặc khác biệt giữa hai mệnh này đối với việc chọn SIM phong thủy. Chỉ được nói về xu hướng, thời điểm, mức độ ảnh hưởng, và điều kiện sử dụng. Không phán xét số phận hay gây hoang mang.]
 
 ### Luận Phong thủy số
-[Diễn giải năng lượng của các con số dưới góc nhìn phong thủy số học.]
+[Diễn giải năng lượng của các con số dưới góc nhìn phong thủy số học. Nếu có điểm nhấn cặp số do hệ thống cung cấp, chỉ nhắc lại như tín hiệu tham khảo, không tự thêm cặp mới và không chấm điểm.]
 
 ### Luận Kinh Dịch
 [Diễn giải ý nghĩa của các quẻ dịch (Tiền vận, Trung vận, Hậu vận) tác động đến cuộc sống người dùng. Tuyệt đối không đề cập đến số thứ tự quẻ hay tên Hán-Việt của quẻ.]
@@ -191,7 +197,7 @@ Bạn phải phân tích và trả về đúng định dạng Markdown có cấu
 [Diễn giải tần số rung động của SIM tương hợp hay xung đột thế nào với bản đồ Thần số học cốt lõi của người dùng (bao gồm Con số chủ đạo ${lifePath}, Sứ mệnh ${nameNumbers.expression}, Linh hồn ${nameNumbers.soulUrge}, Nhân cách ${nameNumbers.personality}). Hãy chỉ ra cách SIM này ảnh hưởng tiêu cực/tích cực đến vận trình của họ trong giai đoạn đỉnh cao cuộc đời hiện tại (Đỉnh ${currentPinnacle.phase} mang tần số rung động số ${currentPinnacle.value} hướng đến mốc tuổi ${currentPinnacle.age}).]
 
 ### Luận Chiêm tinh
-[${astrologyInstruction}]
+[${astrologyInstruction} Sau đó, nếu hệ thống có điểm nhấn cặp số Ngũ hành, hãy lồng ghép ngắn gọn như phần chiêm nghiệm bổ sung để câu chuyện mềm hơn; tuyệt đối không tự tạo thêm cặp số hoặc điểm số.]
 
 *Lưu ý quan trọng:*
 - Hãy viết cực kỳ ngắn gọn, cô đọng và súc tích cho mỗi mục (khoảng 80-120 từ mỗi mục) để tránh bị cắt cụt văn bản.
@@ -273,4 +279,6 @@ Yêu cầu nội dung bản tin tử vi hằng ngày:
 
   return callAi(prompt);
 }
+
+
 
