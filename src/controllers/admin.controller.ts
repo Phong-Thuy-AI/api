@@ -1,8 +1,8 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { Op, QueryTypes } from 'sequelize';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
-import { SystemConfig, Order, User, DailyEmailLog, ChatRoom, ChatMessage, sequelize } from '@/models';
+import { SystemConfig, Order, User, DailyEmailLog, ChatRoom, ChatMessage, SimCheckEvent, sequelize } from '@/models';
 import { sendSuccess } from '@/utils/response';
 import { generateAllDailyHoroscopes, sendAllDailyEmails, sendExpirationAlerts } from '@/services/cron.service';
 import { forcePayOrder } from '@/services/payment.service';
@@ -408,15 +408,23 @@ export async function getUsers(req: Request, res: Response) {
   // Đếm số lượt check cho mỗi user (cùng name + dob)
   const usersWithCheckCount = await Promise.all(
     users.map(async (u) => {
-      const checkCount = await User.count({
-        where: {
-          name: u.name,
-          dob: u.dob
-        }
-      });
+      const [checkCount, latestCheck] = await Promise.all([
+        User.count({
+          where: {
+            name: u.name,
+            dob: u.dob
+          }
+        }),
+        SimCheckEvent.findOne({
+          where: { userId: u.id },
+          attributes: ['createdAt'],
+          order: [['createdAt', 'DESC']]
+        })
+      ]);
       return {
         ...u.toJSON(),
-        checkCount
+        checkCount,
+        lastCheckAt: latestCheck?.createdAt ?? null
       };
     })
   );
@@ -966,3 +974,4 @@ export async function confirmSimOrder(req: Request, res: Response) {
     'Chốt SIM thành công, đã sinh mã giới thiệu và tặng 1 tháng tử vi hằng ngày miễn phí.'
   );
 }
+
