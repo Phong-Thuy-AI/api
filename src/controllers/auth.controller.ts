@@ -222,7 +222,7 @@ export async function subscribeTrial(req: Request, res: Response) {
 
   // Nếu người dùng đăng ký tử vi mà chưa chọn vấn đề cải vận thì gán mặc định
   if (!user.focusArea) {
-    user.focusArea = 'Công việc'; // Giá trị mặc định
+    user.focusArea = 'Sức khỏe'; // Giá trị mặc định
   }
 
   const now = new Date();

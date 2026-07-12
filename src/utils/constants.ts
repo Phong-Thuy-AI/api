@@ -42,14 +42,14 @@ export const CREDIT_DAYS_500K = 90  // 3 tháng
 // Định nghĩa 5 Vấn đề cải vận
 export const FOCUS_GIA_DAO = 'Gia đạo';
 export const FOCUS_TINH_DUYEN = 'Tình duyên';
-export const FOCUS_CONG_VIEC = 'Công việc';
+export const FOCUS_SUC_KHOE = 'Sức khỏe';
 export const FOCUS_CONG_DANH = 'Công danh';
 export const FOCUS_SU_NGHIEP = 'Sự nghiệp';
 
 export const FOCUS_AREAS = [
   FOCUS_GIA_DAO,
   FOCUS_TINH_DUYEN,
-  FOCUS_CONG_VIEC,
+  FOCUS_SUC_KHOE,
   FOCUS_CONG_DANH,
   FOCUS_SU_NGHIEP
 ] as const;

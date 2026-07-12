@@ -1,13 +1,69 @@
 import { Request, Response } from 'express';
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
-import { SystemConfig, Order, User, DailyEmailLog, ChatRoom, ChatMessage } from '@/models';
+import { SystemConfig, Order, User, DailyEmailLog, ChatRoom, ChatMessage, sequelize } from '@/models';
 import { sendSuccess } from '@/utils/response';
 import { generateAllDailyHoroscopes, sendAllDailyEmails, sendExpirationAlerts } from '@/services/cron.service';
 import { forcePayOrder } from '@/services/payment.service';
 import { getIO } from '@/services/socket.service';
-import { getICTParts, getICTDateStrVN } from '@/utils/date';
+import { getICTParts, getICTDateStrVN, getICTDateString } from '@/utils/date';
+
+function clampReportRange(value: unknown): 7 | 30 | 90 {
+  const parsed = parseInt(String(value || '30'), 10);
+  if (parsed === 7 || parsed === 90) return parsed;
+  return 30;
+}
+
+function toNumber(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  return Number(value) || 0;
+}
+
+function padDatePart(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function addDaysToDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days, 12));
+  return `${date.getUTCFullYear()}-${padDatePart(date.getUTCMonth() + 1)}-${padDatePart(date.getUTCDate())}`;
+}
+
+function getReportStartDateKey(range: number): string {
+  return addDaysToDateKey(getICTDateString(), -(range - 1));
+}
+
+function getReportStartDateSql(range: number): string {
+  return `${getReportStartDateKey(range)} 00:00:00`;
+}
+
+function formatDateKey(date: Date): string {
+  const parts = getICTParts(date);
+  return `${parts.year}-${padDatePart(parts.month)}-${padDatePart(parts.day)}`;
+}
+
+function buildDateKeys(range: number, startDateKey: string): string[] {
+  return Array.from({ length: range }, (_, index) => {
+    return addDaysToDateKey(startDateKey, index);
+  });
+}
+
+function rowsByDate<T extends Record<string, any>>(rows: T[]): Map<string, T> {
+  return new Map(rows.map(row => {
+    const rawDate = row.date;
+    const key = rawDate instanceof Date ? formatDateKey(rawDate) : String(rawDate).slice(0, 10);
+    return [key, row];
+  }));
+}
+
+function normalizeGroupRows(rows: Array<Record<string, any>>, labelKey = 'label') {
+  return rows.map(row => ({
+    label: String(row[labelKey] || 'Khong xac dinh'),
+    value: toNumber(row.value),
+    revenue: toNumber(row.revenue)
+  }));
+}
 
 /**
  * Lưu hoặc cập nhật một giá trị cấu hình hệ thống
@@ -96,6 +152,204 @@ export async function triggerDailyHoroscopes(req: Request, res: Response) {
  * GET /api/v1/admin/orders
  * Query: status, search
  */
+export async function getReportOverview(req: Request, res: Response) {
+  const range = clampReportRange(req.query.range);
+  const startDateKey = getReportStartDateKey(range);
+  const startDate = getReportStartDateSql(range);
+  const replacements = { startDate };
+
+  const [
+    pageSummaryRows,
+    simSummaryRows,
+    orderSummaryRows,
+    chatSummaryRows,
+    emailSummaryRows,
+    userSummaryRows,
+    pageSeriesRows,
+    simSeriesRows,
+    orderSeriesRows,
+    revenueSeriesRows,
+    topPagesRows,
+    orderStatusRows,
+    packageTypeRows,
+    focusAreaRows,
+    chatSourceRows,
+    emailStatusRows
+  ] = await Promise.all([
+    sequelize.query<Record<string, any>>(
+      `SELECT COUNT(*) AS pageViews, COUNT(DISTINCT visitor_id) AS uniqueVisitors
+       FROM analytics_page_views
+       WHERE created_at >= :startDate`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT COUNT(*) AS simChecks
+       FROM sim_check_events
+       WHERE created_at >= :startDate`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT
+         COUNT(*) AS orders,
+         SUM(CASE WHEN status IN ('paid', 'completed') THEN 1 ELSE 0 END) AS paidOrders,
+         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pendingOrders,
+         SUM(CASE WHEN status IN ('paid', 'completed') THEN amount ELSE 0 END) AS revenue
+       FROM orders
+       WHERE created_at >= :startDate`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT COUNT(*) AS activeChats
+       FROM chat_rooms
+       WHERE status = 'active'`,
+      { type: QueryTypes.SELECT }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT
+         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS emailSuccess,
+         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS emailFailed
+       FROM daily_email_logs
+       WHERE sent_at >= :startDate`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT COUNT(*) AS newUsers
+       FROM users
+       WHERE created_at >= :startDate`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT DATE(created_at) AS date, COUNT(*) AS pageViews, COUNT(DISTINCT visitor_id) AS uniqueVisitors
+       FROM analytics_page_views
+       WHERE created_at >= :startDate
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT DATE(created_at) AS date, COUNT(*) AS simChecks
+       FROM sim_check_events
+       WHERE created_at >= :startDate
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT DATE(created_at) AS date, COUNT(*) AS orders
+       FROM orders
+       WHERE created_at >= :startDate
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT DATE(COALESCE(paid_at, updated_at)) AS date, SUM(amount) AS revenue
+       FROM orders
+       WHERE status IN ('paid', 'completed') AND COALESCE(paid_at, updated_at) >= :startDate
+       GROUP BY DATE(COALESCE(paid_at, updated_at))
+       ORDER BY date ASC`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT path AS label, COUNT(*) AS value
+       FROM analytics_page_views
+       WHERE created_at >= :startDate
+       GROUP BY path
+       ORDER BY value DESC
+       LIMIT 8`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT status AS label, COUNT(*) AS value
+       FROM orders
+       WHERE created_at >= :startDate
+       GROUP BY status`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT package_type AS label, COUNT(*) AS value,
+         SUM(CASE WHEN status IN ('paid', 'completed') THEN amount ELSE 0 END) AS revenue
+       FROM orders
+       WHERE created_at >= :startDate
+       GROUP BY package_type`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT COALESCE(NULLIF(focus_area, ''), 'Khong xac dinh') AS label, COUNT(*) AS value
+       FROM sim_check_events
+       WHERE created_at >= :startDate
+       GROUP BY COALESCE(NULLIF(focus_area, ''), 'Khong xac dinh')
+       ORDER BY value DESC`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT source_type AS label, COUNT(*) AS value
+       FROM chat_rooms
+       WHERE created_at >= :startDate
+       GROUP BY source_type`,
+      { type: QueryTypes.SELECT, replacements }
+    ),
+    sequelize.query<Record<string, any>>(
+      `SELECT status AS label, COUNT(*) AS value
+       FROM daily_email_logs
+       WHERE sent_at >= :startDate
+       GROUP BY status`,
+      { type: QueryTypes.SELECT, replacements }
+    )
+  ]);
+
+  const pageSummary = pageSummaryRows[0] || {};
+  const simSummary = simSummaryRows[0] || {};
+  const orderSummary = orderSummaryRows[0] || {};
+  const chatSummary = chatSummaryRows[0] || {};
+  const emailSummary = emailSummaryRows[0] || {};
+  const userSummary = userSummaryRows[0] || {};
+
+  const pageSeries = rowsByDate(pageSeriesRows);
+  const simSeries = rowsByDate(simSeriesRows);
+  const orderSeries = rowsByDate(orderSeriesRows);
+  const revenueSeries = rowsByDate(revenueSeriesRows);
+
+  const series = buildDateKeys(range, startDateKey).map(date => ({
+    date,
+    pageViews: toNumber(pageSeries.get(date)?.pageViews),
+    uniqueVisitors: toNumber(pageSeries.get(date)?.uniqueVisitors),
+    simChecks: toNumber(simSeries.get(date)?.simChecks),
+    orders: toNumber(orderSeries.get(date)?.orders),
+    revenue: toNumber(revenueSeries.get(date)?.revenue)
+  }));
+
+  const pageViews = toNumber(pageSummary.pageViews);
+  const simChecks = toNumber(simSummary.simChecks);
+
+  return sendSuccess(res, {
+    range,
+    summary: {
+      pageViews,
+      uniqueVisitors: toNumber(pageSummary.uniqueVisitors),
+      simChecks,
+      conversionRate: pageViews > 0 ? Number(((simChecks / pageViews) * 100).toFixed(2)) : 0,
+      orders: toNumber(orderSummary.orders),
+      paidOrders: toNumber(orderSummary.paidOrders),
+      revenue: toNumber(orderSummary.revenue),
+      pendingOrders: toNumber(orderSummary.pendingOrders),
+      activeChats: toNumber(chatSummary.activeChats),
+      emailSuccess: toNumber(emailSummary.emailSuccess),
+      emailFailed: toNumber(emailSummary.emailFailed),
+      newUsers: toNumber(userSummary.newUsers)
+    },
+    series,
+    breakdowns: {
+      topPages: normalizeGroupRows(topPagesRows),
+      orderStatus: normalizeGroupRows(orderStatusRows),
+      packageTypes: normalizeGroupRows(packageTypeRows),
+      focusAreas: normalizeGroupRows(focusAreaRows),
+      chatSources: normalizeGroupRows(chatSourceRows),
+      emailStatus: normalizeGroupRows(emailStatusRows)
+    }
+  }, 'Lay bao cao tong quan thanh cong.');
+}
+
 export async function getOrders(req: Request, res: Response) {
   const { status, search } = req.query;
   const whereClause: any = {};
