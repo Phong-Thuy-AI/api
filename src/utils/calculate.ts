@@ -380,13 +380,13 @@ export function calculateVanQueSim(
   const hauClass = normalizeClassification(classifications.hau);
 
   const getPeriodScore = (classification: string, period: 'tien' | 'trung' | 'hau'): number => {
-    if (classification.includes('DAI CAT') || classification === 'CAT') {
+    if (classification.includes('DAI CAT')) {
       return period === 'hau' ? 30 : 20;
     }
-    if (classification === 'BAN CAT') {
+    if (classification === 'CAT') {
       return period === 'hau' ? 20 : 15;
     }
-    if (classification.includes('BAN CAT') && (classification.includes('BAN HUNG') || classification.includes('HUNG'))) {
+    if (classification.includes('BAN CAT') || classification.includes('BAN HUNG')) {
       return 5;
     }
     return 0;
@@ -402,6 +402,7 @@ export function calculateVanQueSim(
   let details = '';
 
   const isHung = (cls: string) => cls.includes('DAI HUNG') || cls === 'HUNG';
+  const isCat = (cls: string) => cls.includes('DAI CAT') || cls === 'CAT';
 
   // 2. Áp dụng quy tắc ghi đè (Overrides)
   
@@ -411,15 +412,16 @@ export function calculateVanQueSim(
     rating = 'Khuyên bỏ SIM';
     details = `Cảnh báo đặc biệt: Hậu vận của SIM thuộc quẻ xấu (${classifications.hau}). Hậu vận là giai đoạn thu hoạch tích lũy cuối cùng, nếu gặp vận Hung/Đại Hung thì dù các vận trước tốt đến mấy vẫn khuyên nên bỏ sử dụng SIM này.`;
   }
-  // Quy tắc Tiền vận: Thời gian dùng SIM dưới 6 tháng & Tiền vận bị Hung / Đại Hung -> 0 điểm, Khuyên đổi SIM
-  else if (usedLessThan6Months && isHung(tienClass)) {
+  // Quy tắc Tiền vận: Thời gian dùng SIM dưới 6 tháng & Tiền vận bị Hung / Đại Hung & Hậu vận KHÔNG phải quẻ Cát -> 0 điểm, Khuyên đổi SIM
+  else if (usedLessThan6Months && isHung(tienClass) && !isCat(hauClass)) {
     score = 0;
     rating = 'Khuyên đổi SIM';
     details = `Cảnh báo: Thời gian dùng SIM dưới 6 tháng và Tiền vận gặp quẻ xấu (${classifications.tien}). Vì bạn đang ở giai đoạn đầu chịu năng lượng trực tiếp từ Tiền vận xấu, khuyên bạn nên đổi SIM sớm để tránh xui xẻo.`;
   }
   // Trường hợp tính điểm bình thường không bị ghi đè
   else {
-    if (score >= 55) {
+    const hasHung = isHung(tienClass) || isHung(trungClass) || isHung(hauClass);
+    if (score >= 50 && !hasHung) {
       rating = 'Cát';
       details = `Vận quẻ của SIM rất tốt, mang năng lượng cát tường bổ trợ cuộc sống: Tiền vận [${classifications.tien}], Trung vận [${classifications.trung}], Hậu vận [${classifications.hau}].`;
     } else if (score >= 30) {
