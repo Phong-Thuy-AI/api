@@ -5,6 +5,35 @@ import { signToken, verifyToken } from '@/utils/jwt';
 import { sendSuccess } from '@/utils/response';
 import { PACKAGE_TYPE_200K, ORDER_PAID, ORDER_COMPLETED } from '@/utils/constants';
 
+// Ngưỡng điểm tối đa theo thang mới (v2)
+const NGUHANH_MAX_V2 = 30;
+const VANQUE_MAX_V2 = 70;
+
+/**
+ * Rescale điểm cũ (thang max 50) về thang v2 (max 30 hoặc 70)
+ * Chỉ áp dụng nếu phát hiện dữ liệu cũ: nguHanh.score > 30 hoặc vanQue.score > 70
+ */
+function normalizeCheckResult(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    const nguScore = parsed?.nguHanh?.score ?? 0;
+    const vanScore = parsed?.vanQue?.score ?? 0;
+    const isOldData = nguScore > NGUHANH_MAX_V2 || vanScore > VANQUE_MAX_V2;
+    if (!isOldData) return raw;
+
+    // Rescale: thang cũ max nguHanh=50 → max mới=30; vanQue max cũ=50 → max mới=70
+    const nguRatio = Math.min(nguScore / 50, 1);
+    const vanRatio = Math.min(vanScore / 50, 1);
+    parsed.nguHanh.score = Math.round(nguRatio * NGUHANH_MAX_V2);
+    parsed.vanQue.score = Math.round(vanRatio * VANQUE_MAX_V2);
+    parsed.totalScore = parsed.nguHanh.score + parsed.vanQue.score;
+    return JSON.stringify(parsed);
+  } catch {
+    return raw;
+  }
+}
+
 function getAdminCredentials() {
   const username = process.env.ADMIN_USERNAME;
   const password = process.env.ADMIN_PASSWORD;
@@ -141,7 +170,7 @@ export async function lookupUser(req: Request, res: Response) {
       menh: user.menh,
       focusArea: user.focusArea,
       referralCode: user.referralCode,
-      lastCheckResult: user.lastCheckResult
+      lastCheckResult: normalizeCheckResult(user.lastCheckResult)
     },
     orders: ordersWithRoom
   }, 'Tra cứu thông tin khách hàng thành công.');
