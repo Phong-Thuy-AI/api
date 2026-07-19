@@ -157,32 +157,53 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
     })).toThrow();
   });
 
-  test('Chấm điểm cơ bản theo thang Tiền 20, Trung 20, Hậu 30', () => {
+  test('Chấm điểm cơ bản theo thang ĐC (20-20-30), Cát (15-15-20), Bán Cát (5-5-5)', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'CÁT',
-      trung: 'BÁN CÁT',
+      trung: 'BÁN CÁT – BÁN HUNG',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(65);
-    expect(result.rating).toBe('Cát');
+    expect(result.score).toBe(40);
+    expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
-  test('Case Đại Cát / Cát / Đại Cát ra 70 điểm', () => {
+
+  test('Case 3 Đại Cát ra 70 điểm', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'ĐẠI CÁT',
-      trung: 'CÁT',
+      trung: 'ĐẠI CÁT',
       hau: 'ĐẠI CÁT'
     });
     expect(result.score).toBe(70);
     expect(result.rating).toBe('Cát');
   });
 
-  test('Case Cát / Đại Hung / Đại Cát ra 50 điểm', () => {
+  test('Case 3 Cát ra 50 điểm', () => {
+    const result = calculateVanQueSim('123456', false, {
+      tien: 'CÁT',
+      trung: 'CÁT',
+      hau: 'CÁT'
+    });
+    expect(result.score).toBe(50);
+    expect(result.rating).toBe('Cát');
+  });
+
+  test('Case Đại Cát / Cát / Đại Cát ra 65 điểm', () => {
+    const result = calculateVanQueSim('123456', false, {
+      tien: 'ĐẠI CÁT',
+      trung: 'CÁT',
+      hau: 'ĐẠI CÁT'
+    });
+    expect(result.score).toBe(65);
+    expect(result.rating).toBe('Cát');
+  });
+
+  test('Case Cát / Đại Hung / Đại Cát ra 45 điểm', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'CÁT',
       trung: 'ĐẠI HUNG',
       hau: 'ĐẠI CÁT'
     });
-    expect(result.score).toBe(50);
+    expect(result.score).toBe(45);
     expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
 
@@ -197,15 +218,24 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
     expect(result.rating).toBe('Khuyên bỏ SIM');
   });
 
-  test('Quy tắc Tiền vận - Dùng dưới 6 tháng & Tiền vận Hung -> 0 điểm, Khuyên đổi SIM', () => {
-    // Dùng dưới 6 tháng, Tiền vận Đại Hung, Hậu vận Cát -> 0đ, Khuyên đổi SIM
+  test('Quy tắc Tiền vận - Dùng dưới 6 tháng & Tiền vận Hung & Hậu vận KHÔNG phải Cát -> 0 điểm, Khuyên đổi SIM', () => {
     const result = calculateVanQueSim('123456', true, {
       tien: 'ĐẠI HUNG',
       trung: 'CÁT',
-      hau: 'CÁT'
+      hau: 'BÁN CÁT – BÁN HUNG'
     });
     expect(result.score).toBe(0);
     expect(result.rating).toBe('Khuyên đổi SIM');
+  });
+
+  test('Quy tắc Tiền vận - Dùng dưới 6 tháng & Tiền vận Hung & Hậu vận Cát/Đại Cát -> Tính điểm bình thường, không ghi đè về 0', () => {
+    const result = calculateVanQueSim('123456', true, {
+      tien: 'ĐẠI HUNG',
+      trung: 'CÁT',
+      hau: 'ĐẠI CÁT'
+    });
+    expect(result.score).toBe(45);
+    expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
 
   test('Quy tắc Tiền vận - Dùng trên 6 tháng & Tiền vận Hung -> Tính điểm bình thường theo 20-20-30', () => {
@@ -214,7 +244,7 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
       trung: 'CÁT',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(50);
+    expect(result.score).toBe(35);
     expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
 
@@ -224,7 +254,7 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
       trung: 'HUNG',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(50);
+    expect(result.score).toBe(35);
     expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
 
