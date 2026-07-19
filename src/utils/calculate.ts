@@ -1,4 +1,4 @@
-﻿export interface NguHanhResult {
+export interface NguHanhResult {
   score: number;       // Điểm ngũ hành (0, 20, 40, 50)
   c_sinh: number;      // Số chữ số tương sinh
   c_hop: number;       // Số chữ số tương hỗ / tương hợp
@@ -165,7 +165,7 @@ export function calculateNguHanhSim(phone: string, menh: 'Kim' | 'Mộc' | 'Th�
         (menh === 'Thủy' && digitHanh === 'Thổ') ||
         (menh === 'Mộc' && digitHanh === 'Kim') ||
         (menh === 'Hỏa' && digitHanh === 'Thủy') ||
-        (menh === 'Thổ' && digitHanh === 'Mộc');
+        (menh === 'Thổ' && digitHanh === 'Thủy');
 
       if (isSinh) c_sinh++;
       else if (isKhac) c_khac++;
@@ -177,21 +177,25 @@ export function calculateNguHanhSim(phone: string, menh: 'Kim' | 'Mộc' | 'Th�
   let details = '';
 
   if (c_sinh + c_hop > c_khac && c_sinh > c_khac && c_khac === 0) {
-    score = 50;
+    score = 30;
     rating = 'Đạt';
     details = `SIM có sự phối hợp Ngũ hành rất tốt với mệnh ${menh}: có ${c_sinh} số tương sinh, ${c_hop} số tương hợp và hoàn toàn không bị khắc chế (0 số khắc).`;
   } else if (c_sinh + c_hop > c_khac && c_sinh > c_khac && c_khac > 0) {
-    score = 40;
+    score = 20;
     rating = 'Đạt (Trội)';
     details = `SIM đạt yêu cầu hợp mệnh ${menh}: lượng số sinh (${c_sinh} số) và hợp (${c_hop} số) vẫn chiếm ưu thế vượt trội so với ${c_khac} số khắc.`;
   } else if (c_sinh === c_khac && c_sinh > 0) {
-    score = 20;
+    score = 10;
     rating = 'Biến động lớn';
     details = `SIM này thể hiện sự biến động lớn đối với mệnh ${menh}: số tương sinh (${c_sinh}) cân bằng với số tương khắc (${c_khac}), cuộc đời dễ gặp thăng trầm biến động, tài lộc lúc tụ lúc tán nhanh.`;
   } else {
     score = 0;
     rating = 'Không đạt';
-    details = `SIM không hợp mệnh ${menh}: số lượng tương khắc (${c_khac} số) chiếm ưu thế hơn so với lượng số sinh và hợp (${c_sinh + c_hop} số).`;
+    if (c_khac > c_sinh + c_hop) {
+      details = `SIM không hợp mệnh ${menh}: số lượng tương khắc (${c_khac} số) chiếm ưu thế hơn so với lượng số sinh và hợp (${c_sinh + c_hop} số).`;
+    } else {
+      details = `SIM không hợp mệnh ${menh}: lượng tương sinh (${c_sinh} số) và tương hợp (${c_hop} số) chưa đủ hòa hợp tối ưu để chế ngự ${c_khac} số khắc.`;
+    }
   }
 
   return { score, c_sinh, c_hop, c_khac, rating, details };
@@ -375,15 +379,22 @@ export function calculateVanQueSim(
   const trungClass = normalizeClassification(classifications.trung);
   const hauClass = normalizeClassification(classifications.hau);
 
-  const getPeriodScore = (classification: string, maxScore: 15 | 20): number => {
-    if (classification.includes('DAI CAT')) return maxScore === 20 ? 15 : 10;
-    if (classification === 'CAT') return 5;
+  const getPeriodScore = (classification: string, period: 'tien' | 'trung' | 'hau'): number => {
+    if (classification.includes('DAI CAT') || classification === 'CAT') {
+      return period === 'hau' ? 30 : 20;
+    }
+    if (classification === 'BAN CAT') {
+      return period === 'hau' ? 20 : 15;
+    }
+    if (classification.includes('BAN CAT') && (classification.includes('BAN HUNG') || classification.includes('HUNG'))) {
+      return 5;
+    }
     return 0;
   };
 
-  const tienBasic = getPeriodScore(tienClass, 15);
-  const trungBasic = getPeriodScore(trungClass, 15);
-  const hauBasic = getPeriodScore(hauClass, 20);
+  const tienBasic = getPeriodScore(tienClass, 'tien');
+  const trungBasic = getPeriodScore(trungClass, 'trung');
+  const hauBasic = getPeriodScore(hauClass, 'hau');
 
   let score = tienBasic + trungBasic + hauBasic;
 
@@ -408,10 +419,10 @@ export function calculateVanQueSim(
   }
   // Trường hợp tính điểm bình thường không bị ghi đè
   else {
-    if (score >= 40) {
+    if (score >= 55) {
       rating = 'Cát';
       details = `Vận quẻ của SIM rất tốt, mang năng lượng cát tường bổ trợ cuộc sống: Tiền vận [${classifications.tien}], Trung vận [${classifications.trung}], Hậu vận [${classifications.hau}].`;
-    } else if (score >= 20) {
+    } else if (score >= 30) {
       rating = 'Ổn nhưng điểm thấp';
       details = `Vận quẻ của SIM ở mức trung bình tạm ổn: Tiền vận [${classifications.tien}], Trung vận [${classifications.trung}], Hậu vận [${classifications.hau}].`;
     } else {

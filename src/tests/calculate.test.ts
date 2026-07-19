@@ -1,4 +1,4 @@
-﻿import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect } from '@jest/globals';
 import { calculateMenh, calculateMenhNien, calculateNguHanhDeepInsight, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
 
 describe('Thuật toán tính Mệnh - calculateMenh()', () => {
@@ -61,40 +61,40 @@ describe('Thuật toán tính Mệnh Niên (Năm sinh Can Chi) - calculateMenhNi
 describe('Thuật toán Ngũ hành SIM - calculateNguHanhSim()', () => {
   // Mệnh Kim tương sinh: Thổ (2, 5, 8); tương hợp: Kim (4, 6); tương khắc: Hỏa (9); trung tính: Thủy (0, 1), Mộc (3, 7)
 
-  test('Kiểm tra SĐT của khách hàng 0888898161 (mệnh Thổ)', () => {
-    // 0888898161: 5 số Thổ (8,8,8,8,8 - hợp), 1 Hỏa (9 - sinh), 3 Thủy (0,1,1), 1 Kim (6) -> 1 sinh, 5 hợp, 0 khắc
-    const result = calculateNguHanhSim('0888898161', 'Thổ');
-    expect(result.score).toBe(50);
+  test('Kiểm tra SĐT của khách hàng 2582582589 (mệnh Thổ)', () => {
+    // 2582582589: 9 số Thổ (2,5,8,2,5,8,2,5,8 - hợp), 1 Hỏa (9 - sinh), 0 Thủy (khắc) -> 1 sinh, 9 hợp, 0 khắc
+    const result = calculateNguHanhSim('2582582589', 'Thổ');
+    expect(result.score).toBe(30);
     expect(result.rating).toBe('Đạt');
     expect(result.c_sinh).toBe(1);
-    expect(result.c_hop).toBe(5);
+    expect(result.c_hop).toBe(9);
     expect(result.c_khac).toBe(0);
   });
 
-  test('Đạt 50 điểm (Có số sinh + hợp, không có số khắc) trên toàn bộ SĐT', () => {
+  test('Đạt 30 điểm (Có số sinh + hợp, không có số khắc) trên toàn bộ SĐT', () => {
     // SĐT: 0875624823 -> 5 Thổ (8, 5, 2, 8, 2 - sinh), 2 Kim (6, 4 - hợp), 0 khắc -> 5 sinh, 2 hợp, 0 khắc
     const result = calculateNguHanhSim('0875624823', 'Kim');
-    expect(result.score).toBe(50);
+    expect(result.score).toBe(30);
     expect(result.rating).toBe('Đạt');
     expect(result.c_sinh).toBe(5);
     expect(result.c_hop).toBe(2);
     expect(result.c_khac).toBe(0);
   });
 
-  test('Đạt 40 điểm (Có số sinh + hợp nổi trội nhưng có số khắc) trên toàn bộ SĐT', () => {
+  test('Đạt 20 điểm (Có số sinh + hợp nổi trội nhưng có số khắc) trên toàn bộ SĐT', () => {
     // SĐT: 0987562482 -> 5 Thổ (sinh), 2 Kim (hợp), 1 Hỏa (9 - khắc) -> 5 sinh, 2 hợp, 1 khắc
     const result = calculateNguHanhSim('0987562482', 'Kim');
-    expect(result.score).toBe(40);
+    expect(result.score).toBe(20);
     expect(result.rating).toBe('Đạt (Trội)');
     expect(result.c_sinh).toBe(5);
     expect(result.c_hop).toBe(2);
     expect(result.c_khac).toBe(1);
   });
 
-  test('Biến động lớn (20 điểm) (Sinh = Khắc > 0) trên toàn bộ SĐT', () => {
+  test('Biến động lớn (10 điểm) (Sinh = Khắc > 0) trên toàn bộ SĐT', () => {
     // SĐT: 0137462959 -> 2 Thổ (2, 5 - sinh), 2 Hỏa (9, 9 - khắc), 2 Kim (4, 6 - hợp) -> c_sinh = 2, c_khac = 2
     const result = calculateNguHanhSim('0137462959', 'Kim');
-    expect(result.score).toBe(20);
+    expect(result.score).toBe(10);
     expect(result.rating).toBe('Biến động lớn');
     expect(result.c_sinh).toBe(2);
     expect(result.c_khac).toBe(2);
@@ -157,32 +157,32 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
     })).toThrow();
   });
 
-  test('Chấm điểm cơ bản theo thang 15-15-20, Bán Cát/Bán Hung tính 0 điểm', () => {
+  test('Chấm điểm cơ bản theo thang Tiền 20, Trung 20, Hậu 30', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'CÁT',
       trung: 'BÁN CÁT',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(10);
-    expect(result.rating).toBe('Không tốt');
+    expect(result.score).toBe(65);
+    expect(result.rating).toBe('Cát');
   });
-  test('Case Đại Cát / Cát / Đại Cát ra 30/50 điểm', () => {
+  test('Case Đại Cát / Cát / Đại Cát ra 70 điểm', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'ĐẠI CÁT',
       trung: 'CÁT',
       hau: 'ĐẠI CÁT'
     });
-    expect(result.score).toBe(30);
-    expect(result.rating).toBe('Ổn nhưng điểm thấp');
+    expect(result.score).toBe(70);
+    expect(result.rating).toBe('Cát');
   });
 
-  test('Case Cát / Đại Hung / Đại Cát ra 20/50 điểm', () => {
+  test('Case Cát / Đại Hung / Đại Cát ra 50 điểm', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'CÁT',
       trung: 'ĐẠI HUNG',
       hau: 'ĐẠI CÁT'
     });
-    expect(result.score).toBe(20);
+    expect(result.score).toBe(50);
     expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
 
@@ -208,14 +208,14 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
     expect(result.rating).toBe('Khuyên đổi SIM');
   });
 
-  test('Quy tắc Tiền vận - Dùng trên 6 tháng & Tiền vận Hung -> Tính điểm bình thường theo 15-15-20', () => {
+  test('Quy tắc Tiền vận - Dùng trên 6 tháng & Tiền vận Hung -> Tính điểm bình thường theo 20-20-30', () => {
     const result = calculateVanQueSim('123456', false, {
       tien: 'ĐẠI HUNG',
       trung: 'CÁT',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(10);
-    expect(result.rating).toBe('Không tốt');
+    expect(result.score).toBe(50);
+    expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
 
   test('Trung vận Hung nhưng Hậu vận Cát tính theo điểm từng vận, không gán cố định', () => {
@@ -224,8 +224,8 @@ describe('Thuật toán Vận quẻ SIM - calculateVanQueSim()', () => {
       trung: 'HUNG',
       hau: 'CÁT'
     });
-    expect(result.score).toBe(10);
-    expect(result.rating).toBe('Không tốt');
+    expect(result.score).toBe(50);
+    expect(result.rating).toBe('Ổn nhưng điểm thấp');
   });
 
   test('Chiêm nghiệm chuyên sâu trả điểm nhấn theo giai đoạn, không chấm điểm', () => {
