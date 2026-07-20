@@ -9,6 +9,7 @@ import { SystemConfig } from './systemConfig.model'
 import { DailyEmailLog } from './dailyEmailLog.model'
 import { AnalyticsPageView } from './analyticsPageView.model'
 import { SimCheckEvent } from './simCheckEvent.model'
+import { SystemLog } from './systemLog.model'
 
 // Define Associations
 
@@ -39,7 +40,8 @@ export {
   SystemConfig,
   DailyEmailLog,
   AnalyticsPageView,
-  SimCheckEvent
+  SimCheckEvent,
+  SystemLog
 }
 
 export default {
@@ -53,5 +55,6 @@ export default {
   SystemConfig,
   DailyEmailLog,
   AnalyticsPageView,
-  SimCheckEvent
+  SimCheckEvent,
+  SystemLog
 }
