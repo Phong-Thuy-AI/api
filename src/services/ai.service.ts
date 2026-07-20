@@ -1,5 +1,6 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import { SystemConfig } from '@/models';
+import { logAiError } from '@/services/logger.service';
 import {
   calculateLifePath,
   calculateNameNumbers,
@@ -95,6 +96,7 @@ async function callAi(prompt: string): Promise<string | null> {
     }
   } catch (err: any) {
     console.error(`[AI] callAi error (${provider}/${model}):`, err.response?.data?.error?.message || err.message);
+    await logAiError(provider, model, err, { promptLength: prompt.length });
     return null;
   }
 }

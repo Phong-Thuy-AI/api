@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { sendError } from '@/utils/response';
+import { logError } from '@/services/logger.service';
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -52,11 +53,30 @@ export const errorHandler = (
     message = 'Mã xác thực không hợp lệ hoặc bị thay đổi.';
   }
 
-  // Ghi log lỗi để phục vụ việc debug & bảo trì
+  // Ghi log lỗi vào console
   console.error(`[ERROR] [${req.method} ${req.originalUrl}] ${code} (${statusCode}) - ${err.message}`);
   if (statusCode === 500) {
     console.error(err);
   }
+
+  // Tự động lưu log lỗi vào cơ sở dữ liệu system_logs
+  const level = statusCode >= 500 ? 'error' : 'warn';
+  logError({
+    level,
+    source: 'api',
+    statusCode,
+    method: req.method,
+    path: req.originalUrl || req.url,
+    message: `${code}: ${message}`,
+    stack: err.stack || null,
+    metadata: {
+      params: req.params,
+      query: req.query,
+      body: req.body ? { ...req.body, password: req.body.password ? '***' : undefined } : null,
+      ip: req.ip || req.headers['x-forwarded-for'] || null,
+      user: (req as any).user || null
+    }
+  }).catch(e => console.error('[ErrorHandler] Failed to save logError:', e));
 
   return sendError(res, code, message, details, statusCode);
 };

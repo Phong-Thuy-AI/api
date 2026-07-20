@@ -15,7 +15,10 @@ import {
   testAiConnection,
   testEmailSend,
   getEmailLogs,
-  getReportOverview
+  getReportOverview,
+  getSystemLogs,
+  getSystemLogStats,
+  clearSystemLogs
 } from '@/controllers/admin.controller';
 import { requireAdmin } from '@/middlewares/auth.middleware';
 import { asyncHandler } from '@/utils/asyncHandler';
@@ -52,5 +55,10 @@ router.post('/email/test-send', asyncHandler(testEmailSend));
 
 // Nhật ký gửi mail hằng ngày
 router.get('/email-logs', asyncHandler(getEmailLogs));
+
+// Nhật ký & Lỗi hệ thống (System Logs)
+router.get('/logs', asyncHandler(getSystemLogs));
+router.get('/logs/stats', asyncHandler(getSystemLogStats));
+router.delete('/logs', asyncHandler(clearSystemLogs));
 
 export default router;

@@ -4,6 +4,7 @@ import { DailyHoroscope, User, DailyEmailLog } from '@/models';
 import { generateDailyHoroscope } from '@/services/ai.service';
 import { sendDailyHoroscope, sendSubscriptionExpiryEmail } from '@/services/email.service';
 import { checkAllPendingOrders } from '@/services/payment.service';
+import { logCronError, cleanOldSystemLogs } from '@/services/logger.service';
 import { MENH_LIST, FOCUS_AREAS } from '@/utils/constants';
 import { calculateLifePath, calculatePersonalVibrations, getCurrentPinnacle } from '@/utils/numerology';
 import { signToken } from '@/utils/jwt';
@@ -216,9 +217,34 @@ export function initCronJobs(): void {
   cron.schedule('0 0 * * *', async () => {
     console.log('[Cron] Daily horoscope job triggered at 00:00 ICT.');
     const now = new Date();
-    await generateAllDailyHoroscopes(now);
-    await sendAllDailyEmails(now);
-    await sendExpirationAlerts();
+    try {
+      await generateAllDailyHoroscopes(now);
+    } catch (err) {
+      console.error('[Cron] Lỗi generateAllDailyHoroscopes:', err);
+      await logCronError('generateAllDailyHoroscopes', err);
+    }
+
+    try {
+      await sendAllDailyEmails(now);
+    } catch (err) {
+      console.error('[Cron] Lỗi sendAllDailyEmails:', err);
+      await logCronError('sendAllDailyEmails', err);
+    }
+
+    try {
+      await sendExpirationAlerts();
+    } catch (err) {
+      console.error('[Cron] Lỗi sendExpirationAlerts:', err);
+      await logCronError('sendExpirationAlerts', err);
+    }
+  }, {
+    timezone: 'Asia/Ho_Chi_Minh'
+  });
+
+  // Chạy dọn dẹp log hệ thống cũ hơn 30 ngày vào 03:00 sáng Chủ Nhật hàng tuần
+  cron.schedule('0 3 * * 0', async () => {
+    console.log('[Cron] Cleaning old system logs...');
+    await cleanOldSystemLogs(30);
   }, {
     timezone: 'Asia/Ho_Chi_Minh'
   });

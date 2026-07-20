@@ -1,8 +1,8 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { Op, QueryTypes } from 'sequelize';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
-import { SystemConfig, Order, User, DailyEmailLog, ChatRoom, ChatMessage, SimCheckEvent, sequelize } from '@/models';
+import { SystemConfig, Order, User, DailyEmailLog, ChatRoom, ChatMessage, SimCheckEvent, SystemLog, sequelize } from '@/models';
 import { sendSuccess } from '@/utils/response';
 import { generateAllDailyHoroscopes, sendAllDailyEmails, sendExpirationAlerts } from '@/services/cron.service';
 import { forcePayOrder } from '@/services/payment.service';
@@ -973,5 +973,123 @@ export async function confirmSimOrder(req: Request, res: Response) {
     { referralCode, horoscopeExpiresAt: user.horoscopeExpiresAt },
     'Chốt SIM thành công, đã sinh mã giới thiệu và tặng 1 tháng tử vi hằng ngày miễn phí.'
   );
+}
+
+/**
+ * Lấy danh sách log hệ thống (Phân trang, Lọc theo level, source, statusCode, keyword)
+ * GET /api/v1/admin/logs
+ */
+export async function getSystemLogs(req: Request, res: Response) {
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '20'), 10)));
+  const offset = (page - 1) * limit;
+
+  const { level, source, statusCodeGroup, search } = req.query;
+
+  const whereClause: any = {};
+
+  if (level && ['error', 'warn', 'info'].includes(String(level))) {
+    whereClause.level = String(level);
+  }
+
+  if (source && ['api', 'ai', 'cron', 'email', 'payment'].includes(String(source))) {
+    whereClause.source = String(source);
+  }
+
+  if (statusCodeGroup === '5xx') {
+    whereClause.statusCode = { [Op.gte]: 500 };
+  } else if (statusCodeGroup === '4xx') {
+    whereClause.statusCode = { [Op.and]: [{ [Op.gte]: 400 }, { [Op.lt]: 500 }] };
+  } else if (req.query.statusCode) {
+    whereClause.statusCode = parseInt(String(req.query.statusCode), 10);
+  }
+
+  if (search && typeof search === 'string' && search.trim()) {
+    const q = `%${search.trim()}%`;
+    whereClause[Op.or] = [
+      { message: { [Op.like]: q } },
+      { path: { [Op.like]: q } },
+      { stack: { [Op.like]: q } }
+    ];
+  }
+
+  const { count, rows } = await SystemLog.findAndCountAll({
+    where: whereClause,
+    order: [['createdAt', 'DESC']],
+    limit,
+    offset
+  });
+
+  return sendSuccess(res, {
+    logs: rows,
+    pagination: {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil(count / limit)
+    }
+  }, 'Lấy danh sách nhật ký hệ thống thành công.');
+}
+
+/**
+ * Lấy số liệu thống kê nhanh về log lỗi trong ngày
+ * GET /api/v1/admin/logs/stats
+ */
+export async function getSystemLogStats(req: Request, res: Response) {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const errorsToday = await SystemLog.count({
+    where: {
+      createdAt: { [Op.gte]: startOfDay },
+      statusCode: { [Op.gte]: 500 }
+    }
+  });
+
+  const aiErrorsToday = await SystemLog.count({
+    where: {
+      createdAt: { [Op.gte]: startOfDay },
+      source: 'ai'
+    }
+  });
+
+  const clientErrorsToday = await SystemLog.count({
+    where: {
+      createdAt: { [Op.gte]: startOfDay },
+      statusCode: { [Op.and]: [{ [Op.gte]: 400 }, { [Op.lt]: 500 }] }
+    }
+  });
+
+  const totalLogs = await SystemLog.count();
+
+  return sendSuccess(res, {
+    errorsToday,
+    aiErrorsToday,
+    clientErrorsToday,
+    totalLogs
+  }, 'Lấy thống kê log thành công.');
+}
+
+/**
+ * Xóa log hệ thống (Tất cả hoặc theo điều kiện)
+ * DELETE /api/v1/admin/logs
+ */
+export async function clearSystemLogs(req: Request, res: Response) {
+  const { mode } = req.body || {};
+
+  if (mode === 'all') {
+    await SystemLog.destroy({ where: {}, truncate: true });
+    return sendSuccess(res, null, 'Đã xóa toàn bộ nhật ký hệ thống.');
+  }
+
+  // Mặc định xóa log cũ hơn 30 ngày
+  const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const deletedCount = await SystemLog.destroy({
+    where: {
+      createdAt: { [Op.lt]: cutoffDate }
+    }
+  });
+
+  return sendSuccess(res, { deletedCount }, `Đã dọn dẹp ${deletedCount} nhật ký cũ hơn 30 ngày.`);
 }
 

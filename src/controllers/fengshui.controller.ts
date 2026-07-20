@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { User, Hexagram, SimCheckEvent } from '@/models';
 import { calculateMenh, calculateMenhNien, calculateNguHanhDeepInsight, calculateNguHanhSim, calculateVanQueSim } from '@/utils/calculate';
 import { signToken } from '@/utils/jwt';
@@ -261,12 +261,16 @@ export async function checkFengShuiSim(req: Request, res: Response) {
   let user = await User.findOne({ where: { phone: cleanPhone } });
   if (user) {
     user.name = name;
-    user.email = email ? email.trim() : null;
+    if (email && email.trim()) {
+      user.email = email.trim();
+    }
     user.phone = cleanPhone;
     user.dob = new Date(dob);
     user.tob = tob || '';
     user.menh = menh;
-    user.focusArea = focusArea || null;
+    if (focusArea) {
+      user.focusArea = focusArea;
+    }
     user.lastCheckResult = checkResultJson;
     if (referredByCode && !user.referredByCode) {
       user.referredByCode = referredByCode;
